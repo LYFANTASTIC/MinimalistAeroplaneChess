@@ -148,7 +148,56 @@
 
 ---
 
-### 3. 查询服务器统计信息
+### 3. 查询实时在线用户
+
+**接口地址：** `GET /api/online-users`
+
+**功能：** 获取当前所有活跃 WebSocket 连接的玩家及其状态
+
+**返回数据示例：**
+```json
+{
+  "success": true,
+  "timestamp": "2025-01-13T10:30:00.000Z",
+  "totalOnline": 3,
+  "users": [
+    {
+      "playerId": "player_xyz1",
+      "nickname": "玩家_abcd",
+      "status": "playing",
+      "roomCode": "ABCD",
+      "gameSessionId": "game_1234"
+    },
+    {
+      "playerId": "player_xyz2",
+      "nickname": "玩家_efgh",
+      "status": "in_room",
+      "roomCode": "WXYZ",
+      "gameSessionId": null
+    },
+    {
+      "playerId": "player_xyz3",
+      "nickname": "玩家_ijkl",
+      "status": "idle",
+      "roomCode": null,
+      "gameSessionId": null
+    }
+  ]
+}
+```
+
+**字段说明：**
+- `totalOnline`: 当前活跃的 WebSocket 连接总数
+- `users`: 用户列表
+  - `playerId`: 玩家唯一标识
+  - `nickname`: 玩家当前昵称
+  - `status`: 玩家状态（"idle" 空闲/首页, "in_room" 房间中, "playing" 游戏中, "spectating" 观战中）
+  - `roomCode`: 当前关联的房间号（如果有）
+  - `gameSessionId`: 当前关联的游戏会话ID（如果有）
+
+---
+
+### 4. 查询服务器统计信息
 
 **接口地址：** `GET /api/stats`
 
@@ -161,9 +210,10 @@
   "timestamp": "2025-01-13T10:30:00.000Z",
   "stats": {
     "rooms": {
-      "total": 3,
+      "total": 4,
       "waiting": 2,
-      "playing": 1
+      "playing": 1,
+      "finished": 1
     },
     "sessions": {
       "total": 1
@@ -186,29 +236,29 @@
   - `total`: 总房间数
   - `waiting`: 等待中的房间数
   - `playing`: 游戏中的房间数
+  - `finished`: 已结束但尚未清理的房间数
 - `sessions`: 游戏会话统计总数
 - `players`: 玩家连接相关统计
   - `totalConnections`: 活跃的 WebSocket 连接数
-  - `inRooms`: 在房间映射表中的玩家数量
-  - `inSessions`: 在会话映射表中的玩家数量
+  - `inRooms`: 当前在房间内且在线的人类玩家数量
+  - `inSessions`: 当前在游戏会话内且在线的人类玩家数量
 - `timers`: 定时器统计
   - `roomDestroyTimers`: 房间延迟销毁定时器数量
   - `disconnectTimers`: 断线延迟处理定时器数量
 
-### 4. 手动清理孤立资源
+---
+
+### 5. 手动清理孤立资源
 
 **接口地址：** `POST /api/cleanup`
 
 **功能：** 手动清理孤立的游戏会话和已结束的空房间
 
 **清理规则：**
-- 清理孤立的游戏会话（对应房间不存在或已finished）
-  - 没有关联房间的会话
-  - 关联的房间不存在的会话
-  - 关联的房间状态为finished的会话
-- 清理finished状态的房间
+- 清理孤立的游戏会话（对应房间不存在或已结束）
+- 清理状态为 `finished` 的房间
 - 清理相关的玩家映射关系
-- 清理房间销毁定时器
+- 清理关联的房间销毁定时器
 
 **返回数据示例：**
 ```json
@@ -221,7 +271,11 @@
   },
   "message": "清理完成: 8个孤立会话, 1个已结束房间"
 }
-### 5. 访问地址
+```
+
+---
+
+### 6. 访问地址
 
 部署成功后，访问地址：
 - **游戏主页**：`https://chess.example.com/`
@@ -229,5 +283,6 @@
 - **API 接口**：
   - 房间列表：`https://chess.example.com/api/rooms`
   - 游戏会话：`https://chess.example.com/api/sessions`
+  - 在线用户：`https://chess.example.com/api/online-users`
   - 服务器统计：`https://chess.example.com/api/stats`
   - 手动清理：`https://chess.example.com/api/cleanup` (POST)
