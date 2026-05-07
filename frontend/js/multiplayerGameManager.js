@@ -4050,13 +4050,13 @@ class MultiplayerGameManager {
                     elements.forEach(element => {
                         const currentName = element.textContent;
 
-                        if (isActive && !currentName.includes('【AI】')) {
+                        if (isActive && !currentName.includes('【Bot】')) {
                             // 添加AI标记
-                            element.textContent = currentName + '【AI】';
+                            element.textContent = currentName + '【Bot】';
                             updated = true;
-                        } else if (!isActive && currentName.includes('【AI】')) {
+                        } else if (!isActive && currentName.includes('【Bot】')) {
                             // 移除AI标记
-                            element.textContent = currentName.replace('【AI】', '');
+                            element.textContent = currentName.replace('【Bot】', '');
                             updated = true;
                         }
                     });
@@ -4217,7 +4217,7 @@ class MultiplayerGameManager {
 
         // 注意：断线不应改变“AI托管开关”本身。
         // 玩家离线时，如果其AI托管此前已开启，应继续保持开启状态，
-        // 否则会出现【AI】标记被移除但本地仍处于托管（遮罩/按钮状态未变）的不同步问题。
+        // 否则会出现【Bot】标记被移除但本地仍处于托管（遮罩/按钮状态未变）的不同步问题。
 
         // 注意：服务器端已经发送了chatMessage系统消息，这里不需要重复显示
         // 只需要更新激活玩家列表
@@ -4375,7 +4375,7 @@ class MultiplayerGameManager {
         }
 
         // 自己重连：如果本地仍处于AI托管，主动向服务器重新同步一次。
-        // 否则其他客户端只会看到昵称【AI】（本地渲染）而收不到托管状态，导致操作权限/标记不同步。
+        // 否则其他客户端只会看到昵称【Bot】（本地渲染）而收不到托管状态，导致操作权限/标记不同步。
         if (data.playerId === this.playerId) {
             try {
                 const localTakeoverActive = !!(window.gameState && typeof window.gameState.getIsAITakeover === 'function' && window.gameState.getIsAITakeover());

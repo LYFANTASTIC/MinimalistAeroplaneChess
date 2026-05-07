@@ -831,7 +831,7 @@ class ChessPiece {
                     const finalAbsolutePosition = this.utils.getAbsolutePosition(player, actualFinalPosition);
                     await this.utils.beatChessAtPosition(finalAbsolutePosition, player, this.gameState, (p, i) => {
                         console.log(`[Beat操作-最终位置] 玩家${player}在最终位置${actualFinalPosition}打败玩家${p}的棋子${i}`);
-                        this.animation.moveChessToStart(p, i, null, false, ANIMATION_DELAY.BEAT_HOME_MOVE);
+                        this.animation.moveChessToStart(p, i, null, false, ANIMATION_DELAY.BEAT_HOME_MOVE, true);
                     }, true, true, isRemoteDiceMove, false, ANIMATION_DELAY.BEAT_HOME_MOVE);
                     this.updateAllChessPositions();
                     this.checkStackFormation(player, actualFinalPosition);
@@ -916,9 +916,15 @@ class ChessPiece {
             // 先检查位置18是否有其他玩家的棋子需要beat（飞前撞机）
             const position18AbsolutePosition = this.utils.getAbsolutePosition(player, 18);
             const isRemoteDiceMove = this.gameState.isRemoteDice === true;
-            await this.utils.beatChessAtPosition(position18AbsolutePosition, player, this.gameState, (p, i) => {
-                this.animation.moveChessToStart(p, i, null, false, ANIMATION_DELAY.BEAT_HOME_MOVE);
-            }, true, true, isRemoteDiceMove, false, ANIMATION_DELAY.BEAT_HOME_MOVE);
+            const prevAnimationGuard = this.gameState.isInChessAnimation;
+            this.gameState.isInChessAnimation = true;
+            try {
+                await this.utils.beatChessAtPosition(position18AbsolutePosition, player, this.gameState, (p, i) => {
+                    this.animation.moveChessToStart(p, i, null, false, ANIMATION_DELAY.BEAT_HOME_MOVE, true);
+                }, true, true, isRemoteDiceMove, false, ANIMATION_DELAY.BEAT_HOME_MOVE);
+            } finally {
+                this.gameState.isInChessAnimation = prevAnimationGuard;
+            }
 
             if (hasOpponentStackAt53) {
                 // console.log(`棋子到达位置18，但位置53有对家叠子，降级执行正常跳子到22`);
@@ -1035,7 +1041,8 @@ class ChessPiece {
 
         // 播放飞行音效
         audioManager.playFlySound();
-        // 开始棋子移动动画（不立即await，以便处理路径中的击败）
+        const prevAnimationGuard = this.gameState.isInChessAnimation;
+        this.gameState.isInChessAnimation = true;
         const flyAnimationPromise = this.animation.updateChessPosition(player, chessIndex);
 
         // 在线多人模式下同步棋子位置到服务器
@@ -1058,7 +1065,7 @@ class ChessPiece {
                     this.gameState,
                     (p, i) => {
                         // 飞棋中途击败，给一定的延迟让飞过的动作更连贯
-                        this.animation.moveChessToStart(p, i, null, false, ANIMATION_DELAY.BEAT_HOME_FLY_MID);
+                        this.animation.moveChessToStart(p, i, null, false, ANIMATION_DELAY.BEAT_HOME_FLY_MID, true);
                     },
                     true,
                     true,
@@ -1071,6 +1078,7 @@ class ChessPiece {
 
         // 等待飞棋动画完全结束
         await flyAnimationPromise;
+        this.gameState.isInChessAnimation = prevAnimationGuard;
 
         // 检查飞棋终点是否形成叠子
         this.checkStackFormation(player, targetPosition);
@@ -1081,7 +1089,7 @@ class ChessPiece {
             await this.utils.beatChessAtPosition(targetAbsolutePosition, player, this.gameState, (p, i) => {
                 // console.log(`[Beat操作-飞棋终点] 玩家${player}打败玩家${p}在终点位置${targetPosition}的棋子${i}`);
                 // 飞棋到达终点后的击败，给一定的延迟
-                this.animation.moveChessToStart(p, i, null, false, ANIMATION_DELAY.BEAT_HOME_FLY_END);
+                this.animation.moveChessToStart(p, i, null, false, ANIMATION_DELAY.BEAT_HOME_FLY_END, true);
             }, true, true, false, false, ANIMATION_DELAY.BEAT_HOME_FLY_END);
         }
     }

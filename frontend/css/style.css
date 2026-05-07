@@ -87,6 +87,13 @@ body {
     color: #2d241f;
 }
 
+/* 大屏优化：仅游戏页在宽高充足时垂直居中，避免全屏时整体偏上 */
+@media (min-width: 1261px) and (min-height: 860px) {
+    body.game-page {
+        align-items: center;
+    }
+}
+
 
 
 

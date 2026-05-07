@@ -317,7 +317,7 @@ class AITakeoverManager {
                     console.log('获取玩家编号:', { playerId, playerNumber });
 
                     if (playerNumber && this.originalNames[playerNumber]) {
-                        const newName = this.originalNames[playerNumber] + '【AI】';
+                        const newName = this.originalNames[playerNumber] + '【Bot】';
                         console.log('发送昵称变化消息:', { playerId, newName });
 
                         window.multiplayerGameManager.sendMessage('nicknameChange', {
@@ -358,7 +358,7 @@ class AITakeoverManager {
     }
 
     /**
-     * 修改人类玩家昵称（添加【AI】后缀）
+     * 修改人类玩家昵称（添加【Bot】后缀）
      */
     modifyHumanPlayerNames() {
         // 在线联机模式下，只修改当前本地玩家的昵称
@@ -376,7 +376,7 @@ class AITakeoverManager {
         // 本地模式（单机/本地多人）下的原有逻辑
         const botPlayers = gameState.getBotPlayers();
 
-        // 遍历所有玩家，为非电脑玩家添加【AI】后缀
+        // 遍历所有玩家，为非电脑玩家添加【Bot】后缀
         for (let player = 1; player <= 4; player++) {
             if (!botPlayers.includes(player)) {
                 this.modifyPlayerName(player);
@@ -397,20 +397,20 @@ class AITakeoverManager {
         // 这是人类玩家，需要修改昵称
         const originalName = playerNameManager.getPlayerName(player);
 
-        // 检查昵称是否已经包含【AI】标记，避免重复添加
-        if (originalName.includes('【AI】')) {
-            console.log(`玩家${player}的昵称已包含【AI】标记，跳过修改: ${originalName}`);
-            // 仍然需要保存原始昵称（去除【AI】标记的版本）
+        // 检查昵称是否已经包含【Bot】标记，避免重复添加
+        if (originalName.includes('【Bot】')) {
+            console.log(`玩家${player}的昵称已包含【Bot】标记，跳过修改: ${originalName}`);
+            // 仍然需要保存原始昵称（去除【Bot】标记的版本）
             if (!this.originalNames[player]) {
-                this.originalNames[player] = originalName.replace(/【AI】/g, '');
+                this.originalNames[player] = originalName.replace(/【Bot】/g, '');
             }
             return;
         }
 
         this.originalNames[player] = originalName;
 
-        // 添加【AI】后缀
-        const newName = originalName + '【AI】';
+        // 添加【Bot】后缀
+        const newName = originalName + '【Bot】';
         playerNameManager.setPlayerName(player, newName);
 
         // 更新UI显示

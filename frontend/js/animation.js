@@ -51,7 +51,7 @@ class Animation {
             console.log(`[Beat检测-跳跃起点] 检查起跳点位置${startPosition}（绝对坐标${startAbsolutePosition}）`);
             await this.utils.beatChessAtPosition(startAbsolutePosition, player, this.gameState, (p, i) => {
                 // console.log(`[Beat操作-跳跃起点] 玩家${player}在起跳点打败玩家${p}的棋子${i}`);
-                this.moveChessToStart(p, i);
+                this.moveChessToStart(p, i, null, false, 0, true);
             }, true, true, isRemoteDiceMove, false, 0); // 起跳点被阻挡时，立即触发回家
             return; // 取消跳子，棋子保持在原位置
         }
@@ -68,7 +68,7 @@ class Animation {
             // console.log(`[Beat检测-跳跃起点] 检查起跳点位置${startPosition}（绝对坐标${startAbsolutePosition}）`);
             await this.utils.beatChessAtPosition(startAbsolutePosition, player, this.gameState, (p, i) => {
                 // console.log(`[Beat操作-跳跃起点] 玩家${player}在起跳点打败玩家${p}的棋子${i}`);
-                this.moveChessToStart(p, i);
+                this.moveChessToStart(p, i, null, false, 0, true);
             }, true, true, false, false, 0); // 同样立即触发回家
             return; // 取消跳子，棋子保持在原位置
         }
@@ -85,7 +85,7 @@ class Animation {
         // console.log(`[Beat检测-跳跃起点] 检查起跳点位置${startPosition}（绝对坐标${startAbsolutePosition}）`);
         await this.utils.beatChessAtPosition(startAbsolutePosition, player, this.gameState, (p, i) => {
             // console.log(`[Beat操作-跳跃起点] 玩家${player}在起跳点打败玩家${p}的棋子${i}`);
-            this.moveChessToStart(p, i);
+            this.moveChessToStart(p, i, null, false, 0, true);
         }, true, true, isRemoteDiceMove, false, 0); // 跳跃起点立即触发回家
 
         // 播放跳跃音效
@@ -115,7 +115,7 @@ class Animation {
         this.updateChessPosition(player, chessIndex, async () => {
             await this.utils.beatChessAtPosition(targetAbsolutePosition, player, this.gameState, (p, i) => {
                 // 跳跃落地后的击败，给予轻微延迟
-                this.moveChessToStart(p, i, null, false, ANIMATION_DELAY.BEAT_HOME_JUMP);
+                this.moveChessToStart(p, i, null, false, ANIMATION_DELAY.BEAT_HOME_JUMP, true);
             }, true, true, isRemoteDiceMove, false, ANIMATION_DELAY.BEAT_HOME_JUMP);
             // 检查是否形成叠子
             this.checkStackFormationAtPosition(player, targetPosition);
@@ -244,14 +244,16 @@ class Animation {
         return true;
     }
 
-    moveChessToStart(player, chessIndex, playerChess = null, skipSync = false, delay = 0) {
+    moveChessToStart(player, chessIndex, playerChess = null, skipSync = false, delay = 0, skipBringToFront = false) {
         // 如果传入了playerChess参数，使用传入的；否则使用gameState中的
         const chessData = playerChess || this.gameState.playerChess;
         const chess = chessData[player][chessIndex];
         const startPos = this.gameState.startPositions[player][chessIndex];
 
-        // 移动开始前，先将棋子移到最顶层
-        this.bringToFront(player, chessIndex);
+        // beat 引发的回家动画可能与当前行动动画重叠，允许跳过层级调整以避免打断 transition
+        if (!skipBringToFront) {
+            this.bringToFront(player, chessIndex);
+        }
 
         // 更新棋子的游戏状态
         chess.position = -1;
@@ -531,7 +533,10 @@ class Animation {
                 
                 // 处理叠子外轮廓样式
                 if (chess.element) {
-                    const isStacked = (stackOffset.x !== 0 || stackOffset.y !== 0);
+                    const hasStackOffset = (stackOffset.x !== 0 || stackOffset.y !== 0);
+                    const isFinishLane = chess.position >= 51 && chess.position <= 56;
+                    const shouldHighlightStack = chess.position !== 0 && (!isFinishLane || chess.position === 53);
+                    const isStacked = hasStackOffset && shouldHighlightStack;
                     if (isStacked) {
                         chess.element.classList.add('chess-stacked');
                     } else {
@@ -613,12 +618,11 @@ class Animation {
     bringToFront(player, chessIndex) {
         const chess = this.gameState.playerChess[player][chessIndex];
         if (chess && chess.element && chess.element.parentNode) {
-            // 只有当它不是最后一个子元素时才进行操作
+            if (this.gameState.isInChessAnimation) {
+                return;
+            }
             if (chess.element.parentNode.lastChild !== chess.element) {
                 chess.element.parentNode.appendChild(chess.element);
-                
-                // 强制同步样式，确保浏览器记录下移动后的初始状态
-                // 读取 computedStyle 是比 getBBox 更强力的强制重绘方式
                 window.getComputedStyle(chess.element).transform;
             }
         }

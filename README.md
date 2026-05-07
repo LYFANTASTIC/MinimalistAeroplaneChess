@@ -76,21 +76,23 @@
 ```bash
 git clone https://github.com/ZTMYO/MinimalistAeroplaneChess
 cd minimalist-aeroplane-chess
-
-# 安装前端依赖
-cd frontend && npm install
-
-# 安装后端依赖
-cd ../backend && npm install
+npm install
 ```
 
 #### 3. 运行项目
 ```bash
-# 启动 WebSocket 后端
-cd backend && node server.cjs
+# 根目录一键启动前后端
+npm run dev
+```
 
-# 启动前端开发服务器 (Vite)
-cd ../frontend && npm run dev
+如需手动分开启动：
+
+```bash
+# 终端 1：后端
+cd backend && npm run dev
+
+# 终端 2：前端
+cd frontend && npm run dev
 ```
 
 ---

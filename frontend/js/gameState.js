@@ -28,6 +28,7 @@ class GameState {
         this.gameOfficiallyStarted = false; // 游戏是否正式开始（人类玩家进行了首次操作）
         this.isLocalMultiplayer = false; // 是否为本地多人模式
         this.isOnlineMultiplayer = false; // 是否为在线多人模式
+        this.isInChessAnimation = false; // 是否在棋子动画中（防止bringToFront破坏动画）
 
         // 棋子数量配置
         this.pieceCount = 4; // 默认每个玩家4个棋子
