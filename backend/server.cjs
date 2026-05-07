@@ -3748,7 +3748,10 @@ app.get('/api/online-users', (req, res) => {
 
     // 遍历所有活跃的 WebSocket 连接
     for (const [playerId, ws] of roomManager.playerConnections.entries()) {
-      if (ws.readyState !== WebSocket.OPEN) continue;
+      if (ws.readyState !== WebSocket.OPEN) {
+        roomManager.playerConnections.delete(playerId);
+        continue;
+      }
 
       let status = 'idle'; // 默认：首页/空闲
       let roomCode = null;
@@ -3821,7 +3824,7 @@ app.get('/api/stats', (req, res) => {
         total: roomManager.gameSessions.size
       },
       players: {
-        totalConnections: roomManager.playerConnections.size,
+        totalConnections: 0,
         inRooms: 0, // 仅统计在线
         inSessions: 0 // 仅统计在线
       },
@@ -3833,7 +3836,12 @@ app.get('/api/stats', (req, res) => {
 
     // 统计在线玩家分布
     for (const [playerId, ws] of roomManager.playerConnections.entries()) {
-      if (ws.readyState !== WebSocket.OPEN) continue;
+      if (ws.readyState !== WebSocket.OPEN) {
+        roomManager.playerConnections.delete(playerId);
+        continue;
+      }
+      
+      stats.players.totalConnections++;
       
       if (roomManager.playerSessions.has(playerId)) {
         stats.players.inSessions++;
@@ -3879,7 +3887,7 @@ app.post('/api/cleanup', (req, res) => {
       success: true,
       timestamp: new Date().toISOString(),
       cleaned: result,
-      message: `清理完成: ${result.sessions}个孤立会话, ${result.rooms}个已结束房间`
+      message: `清理完成: ${result.sessions}个孤立会话, ${result.rooms}个已结束房间, ${result.connections}个死连接`
     });
   } catch (error) {
     console.error('清理失败:', error);
@@ -3898,6 +3906,13 @@ function cleanupOrphanedResources() {
   console.log('\n===== 开始清理孤立资源 =====');
   let cleanedSessions = 0;
   let cleanedRooms = 0;
+  let cleanedConnections = 0;
+  for (const [playerId, ws] of roomManager.playerConnections.entries()) {
+    if (ws.readyState !== WebSocket.OPEN) {
+      roomManager.playerConnections.delete(playerId);
+      cleanedConnections++;
+    }
+  }
 
   // 1. 清理孤立的游戏会话（对应房间不存在或已finished）
   const orphanedSessions = [];
@@ -3954,11 +3969,12 @@ function cleanupOrphanedResources() {
     cleanedRooms++;
   }
 
-  console.log(`===== 清理完成: ${cleanedSessions}个会话, ${cleanedRooms}个房间 =====\n`);
+  console.log(`===== 清理完成: ${cleanedSessions}个会话, ${cleanedRooms}个房间, ${cleanedConnections}个死连接 =====\n`);
 
   return {
     sessions: cleanedSessions,
-    rooms: cleanedRooms
+    rooms: cleanedRooms,
+    connections: cleanedConnections
   };
 }
 

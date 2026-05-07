@@ -155,6 +155,24 @@ class SkillManager {
     }
 
     /**
+     * 更新道具按钮的显示/隐藏状态
+     */
+    updateButtonVisibility() {
+        const skillBtn = document.getElementById('skillBtn');
+        if (!skillBtn) return;
+        const isSpectator = window.multiplayerGameManager && window.multiplayerGameManager.isSpectator;
+        const isSkillMode = energyManager.isSkillModeEnabled();
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        const isLoading = loadingIndicator && loadingIndicator.style.display === 'flex';
+
+        if (isSpectator || !isSkillMode || isLoading) {
+            skillBtn.style.display = 'none';
+        } else {
+            skillBtn.style.display = 'block';
+        }
+    }
+
+    /**
      * 处理道具点击
      * @param {HTMLElement} skillItem - 道具项元素
      */

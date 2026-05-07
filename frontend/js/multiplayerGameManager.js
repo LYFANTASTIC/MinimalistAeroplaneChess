@@ -3740,8 +3740,8 @@ class MultiplayerGameManager {
                 // 如果本地音频已经加载好了，且服务器同步过来的名单显示全员已就位
                 const isAllAudioLoadedOnServer = this.audioLoadedPlayers.size >= this.totalPlayers;
                 if (isRealReconnect && window.audioManager && window.audioManager.isLoaded && isAllAudioLoadedOnServer) {
-                    console.log('[重连] 本地和服务器均显示加载完成，尝试隐藏遮罩');
-                    window.audioManager.hideLoadingIndicator();
+                    console.log('[重连] 本地和服务器均显示加载完成，通知音频就绪');
+                    window.audioManager.onAllPlayersAudioLoaded();
                 }
 
                 if (isRealReconnect) {

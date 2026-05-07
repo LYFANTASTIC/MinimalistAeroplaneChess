@@ -267,9 +267,10 @@
   "timestamp": "2025-01-13T10:30:00.000Z",
   "cleaned": {
     "sessions": 8,
-    "rooms": 1
+    "rooms": 1,
+    "connections": 2
   },
-  "message": "清理完成: 8个孤立会话, 1个已结束房间"
+  "message": "清理完成: 8个孤立会话, 1个已结束房间, 2个死连接"
 }
 ```
 

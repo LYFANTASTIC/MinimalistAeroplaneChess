@@ -636,31 +636,54 @@ a.session-id:hover {
 
 /* 平板端优化 */
 @media (max-width: 768px) {
-    body {
-        padding: 15px;
-    }
-
     .admin-header h1 {
-        font-size: 26px;
+        font-size: 24px;
     }
 
     .status-bar {
         width: 100%;
         margin-left: 0;
-        padding: 12px 15px;
+        flex-direction: column;
+        gap: 15px;
     }
 
     .stats-overview {
         grid-template-columns: repeat(2, 1fr);
-        gap: 15px;
+        gap: 10px;
     }
 
-    .section-title {
-        font-size: 20px;
+    .stat-card {
+        padding: 12px;
+        flex-direction: column;
+        gap: 8px;
     }
 
     .stat-value {
-        font-size: 28px;
+        font-size: 24px;
+    }
+
+    .stat-detail {
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .online-users-container {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8px;
+        padding: 10px;
+    }
+
+    .user-tag {
+        width: 100%;
+        justify-content: flex-start;
+        padding: 4px 8px;
+        font-size: 11px;
+    }
+
+    .user-status-text {
+        font-size: 8px;
+        padding: 1px 4px;
     }
 }
 

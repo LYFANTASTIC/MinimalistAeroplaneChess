@@ -72,8 +72,81 @@ class FlyingChessGame {
         // 设置全局游戏实例引用（供其他模块使用）
         window.gameInstance = this;
 
+        // 设置音频管理器回调，处理加载 UI
+        this.setupAudioManagerUI();
+
         // 初始化游戏
         this.initializeGame();
+    }
+
+    /**
+     * 设置音频管理器的 UI 回调
+     */
+    setupAudioManagerUI() {
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        const loadingText = loadingIndicator?.querySelector('.loading-text');
+        const thinkingProgressContainer = document.getElementById('thinkingProgressContainer');
+        const diceDisplay = document.getElementById('diceDisplay');
+
+        // 初始显示加载
+        if (loadingIndicator) loadingIndicator.style.display = 'flex';
+        if (thinkingProgressContainer) thinkingProgressContainer.style.display = 'none';
+        
+        // 只有在非暂停且非显示聊天时才隐藏骰子
+        const isPaused = gameState.getIsPaused();
+        const chatInputArea = document.getElementById('chatInputArea');
+        if (!isPaused && diceDisplay && !(chatInputArea && chatInputArea.style.display === 'flex')) {
+            diceDisplay.style.display = 'none';
+        }
+
+        // 隐藏控制按钮
+        const chatBtn = document.getElementById('chatBtn');
+        const skillBtn = document.getElementById('skillBtn');
+        const lightningBtn = document.getElementById('lightningBtn');
+        if (chatBtn) chatBtn.style.display = 'none';
+        if (skillBtn) skillBtn.style.display = 'none';
+        if (lightningBtn) lightningBtn.style.display = 'none';
+
+        audioManager.onProgress((percentage) => {
+            if (loadingText) loadingText.textContent = `正在加载... ${percentage}%`;
+        });
+
+        audioManager.onStatusChange((status) => {
+            if (status === 'waiting_others') {
+                if (loadingText) loadingText.textContent = '等待其他玩家加载...';
+            } else if (status === 'ready') {
+                this.hideLoadingUI();
+            }
+        });
+    }
+
+    /**
+     * 隐藏加载 UI 并恢复游戏控件
+     */
+    hideLoadingUI() {
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        if (loadingIndicator) loadingIndicator.style.display = 'none';
+
+        // 只有在未暂停时才恢复 UI
+        if (gameState.getIsPaused()) return;
+
+        // 恢复控件显示
+        const diceDisplay = document.getElementById('diceDisplay');
+        const thinkingProgressContainer = document.getElementById('thinkingProgressContainer');
+        
+        if (this.uiUpdater && typeof this.uiUpdater.updateDiceDisplay === 'function') {
+            this.uiUpdater.updateDiceDisplay();
+        } else if (diceDisplay) {
+            const chatInputArea = document.getElementById('chatInputArea');
+            if (!(chatInputArea && window.getComputedStyle(chatInputArea).display !== 'none')) {
+                diceDisplay.style.display = 'flex';
+            }
+        }
+
+        if (thinkingProgressContainer) thinkingProgressContainer.style.display = 'block';
+
+        this.initializeControlButtonsVisibility();
+        this.skillManager.updateButtonVisibility();
     }
 
     // 初始化游戏
