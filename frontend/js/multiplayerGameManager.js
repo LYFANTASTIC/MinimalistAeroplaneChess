@@ -136,6 +136,9 @@ class MultiplayerGameManager {
     async init(multiplayerGameData, gameInstance) {
         this.gameInstance = gameInstance;
         this.isSpectator = multiplayerGameData.isSpectator || false;
+        // 每次进入联机初始化前清理状态，避免跨局残留导致AI误判
+        this.players.clear();
+        this.aiTakeoverPlayers.clear();
         
         // 动态获取 WebSocketClient 如果没有提供
         if (!multiplayerGameData.wsClient && typeof window !== 'undefined' && window.WebSocketClient) {
@@ -333,7 +336,9 @@ class MultiplayerGameManager {
 
         // 只要本地加载完了且全员还没就位，就显示进度
         if (window.audioManager && isLocalLoaded && !isAllLoaded && this.totalPlayers > 0) {
-            window.audioManager.updateLoadingText(`等待其他玩家加载... ${this.audioLoadedPlayers.size}/${this.totalPlayers}`);
+            if (typeof window.audioManager.updateLoadingText === 'function') {
+                window.audioManager.updateLoadingText(`等待其他玩家加载... ${this.audioLoadedPlayers.size}/${this.totalPlayers}`);
+            }
         }
     }
 
@@ -3015,7 +3020,7 @@ class MultiplayerGameManager {
                     chess.lastLandPos = window.gameInstance.chessPiece.generateUniqueLastLandPos(chess.position);
                 }
                 if (animation) {
-                    animation.moveChessToStart(data.player, i);
+                    animation.moveChessToStart(data.player, i, null, true);
                 }
             }
         }
