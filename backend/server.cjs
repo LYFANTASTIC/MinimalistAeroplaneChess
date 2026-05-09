@@ -695,8 +695,8 @@ class Player {
   constructor(id, ws, nickname = '', emoji = 'smile') {
     this.id = id;
     this.ws = ws;
-    const sanitizedNickname = sanitizeText(nickname).trim();
-    this.nickname = sanitizedNickname || getDefaultNickname(id); // 统一默认昵称
+    const normalizedNickname = String(nickname == null ? '' : nickname).trim();
+    this.nickname = normalizedNickname || getDefaultNickname(id); // 统一默认昵称
     this.emoji = emoji;
     this.color = null;
     this.isHost = false;
@@ -1756,9 +1756,11 @@ const handleSelectColor = withRoomValidation((ws, playerId, message, room, playe
 function handleUpdateNickname(ws, playerId, message) {
   try {
     const nickname = message.data?.nickname || message.nickname;
+    const manualInput = message.data?.manualInput === true || message.manualInput === true;
     // 确保nickname是字符串，如果为null/undefined则设置为空字符串
     const nicknameStr = (nickname == null ? '' : String(nickname));
-    const newNickname = sanitizeText(nicknameStr).trim() || getDefaultNickname(playerId);
+    const nextNickname = manualInput ? sanitizeText(nicknameStr) : nicknameStr;
+    const newNickname = nextNickname.trim() || getDefaultNickname(playerId);
 
     // 先尝试在游戏会话中查找玩家
     const gameSession = roomManager.getPlayerGameSession(playerId);
@@ -3115,11 +3117,14 @@ function handleNicknameChange(ws, playerId, message) {
 
   // 支持代理修改昵称
   const targetPlayerId = message.playerId || playerId;
+  const manualInput = message.data?.manualInput === true || message.manualInput === true;
+  const rawNickname = message.nickname == null ? '' : String(message.nickname);
+  const nextNickname = manualInput ? sanitizeText(rawNickname) : rawNickname;
 
   target.broadcast({
     type: 'nicknameChange',
     playerId: targetPlayerId,
-    nickname: sanitizeText(message.nickname),
+    nickname: nextNickname,
     timestamp: message.timestamp
   });
 }

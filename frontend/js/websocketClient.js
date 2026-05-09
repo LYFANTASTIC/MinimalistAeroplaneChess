@@ -212,8 +212,9 @@ export class WebSocketClient {
      * 更新昵称
      * @param {string} nickname - 新昵称
      */
-    updateNickname(nickname) {
-        this.sendMessage('update_nickname', { nickname });
+    updateNickname(nickname, options = {}) {
+        const { manualInput = true } = options;
+        this.sendMessage('update_nickname', { nickname, manualInput });
     }
 
     /**

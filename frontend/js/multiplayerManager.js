@@ -6,7 +6,6 @@
 // 导入重连管理器
 import { reconnectManager } from './reconnectManager.js';
 import { nicknameGenerator } from './nicknameGenerator.js';
-import { sanitizeUserText } from './contentModeration.js';
 
 class MultiplayerManager {
     constructor() {
@@ -504,7 +503,7 @@ class MultiplayerManager {
             this.nicknameUpdateTimeout = setTimeout(() => {
                 // 确保e.target和value存在
                 if (e.target && typeof e.target.value !== 'undefined') {
-                    this.updateNickname(e.target.value);
+                    this.updateNickname(e.target.value, { manualInput: true });
                 }
             }, 500); // 500ms延迟，避免频繁发送请求
         });
@@ -524,7 +523,7 @@ class MultiplayerManager {
                     nicknameInput.value = randomNickname;
                     // 立即触发昵称更新
                     clearTimeout(this.nicknameUpdateTimeout);
-                    this.updateNickname(randomNickname);
+                    this.updateNickname(randomNickname, { manualInput: false });
                 }
             });
         }
@@ -536,7 +535,7 @@ class MultiplayerManager {
                 clearTimeout(this.nicknameUpdateTimeout);
                 // 确保e.target和value存在
                 if (e.target && typeof e.target.value !== 'undefined') {
-                    this.updateNickname(e.target.value);
+                    this.updateNickname(e.target.value, { manualInput: true });
                     e.target.blur(); // 失去焦点
                 }
             }
@@ -1128,7 +1127,7 @@ class MultiplayerManager {
                             // 如果需要同步到服务器
                             if (shouldSyncNickname && this.wsClient) {
                                 setTimeout(() => {
-                                    this.wsClient.updateNickname(nicknameToRestore);
+                                    this.wsClient.updateNickname(nicknameToRestore, { manualInput: false });
                                 }, 100);
                             }
                         } else {
@@ -1302,7 +1301,7 @@ class MultiplayerManager {
                         // 如果需要同步到服务器
                         if (shouldSyncNickname && this.wsClient) {
                             setTimeout(() => {
-                                this.wsClient.updateNickname(nicknameToRestore);
+                                this.wsClient.updateNickname(nicknameToRestore, { manualInput: false });
                             }, 100);
                         }
                     } else {
@@ -2942,7 +2941,7 @@ class MultiplayerManager {
     }
 
     // 更新昵称
-    async updateNickname(nickname) {
+    updateNickname(nickname, options = {}) {
         if (!this.wsClient || !this.currentPlayer) return;
 
         // 确保nickname是字符串类型
@@ -2951,10 +2950,11 @@ class MultiplayerManager {
         }
 
         // 允许空昵称，服务器会在开始游戏时生成默认昵称
-        const trimmedNickname = (await sanitizeUserText(nickname)).trim();
+        const trimmedNickname = nickname.trim();
+        const { manualInput = true } = options;
 
         // 使用WebSocketClient的updateNickname方法
-        this.wsClient.updateNickname(trimmedNickname);
+        this.wsClient.updateNickname(trimmedNickname, { manualInput });
 
         // 使用 playerIdManager 保存昵称到 localStorage（持久化保存）
         if (window.playerIdManager) {
