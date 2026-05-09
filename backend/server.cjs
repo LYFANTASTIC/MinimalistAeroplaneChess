@@ -3,6 +3,8 @@ require('dotenv').config();
 const WebSocket = require('ws');
 const http = require('http');
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
@@ -10,6 +12,46 @@ const wss = new WebSocket.Server({ server });
 
 // 中间件
 app.use(express.json());
+
+let bannedWordRegexes = [];
+
+function escapeRegex(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function loadBannedWords() {
+  try {
+    const dictPath = path.resolve(__dirname, '../frontend/assets/违规词库.txt');
+    const raw = fs.readFileSync(dictPath, 'utf8');
+    const words = Array.from(
+      new Set(
+        raw
+          .split(/\r?\n/)
+          .map(line => line.trim())
+          .filter(Boolean)
+      )
+    ).sort((a, b) => b.length - a.length);
+
+    bannedWordRegexes = words.map(word => new RegExp(escapeRegex(word), 'gi'));
+    console.log(`[内容过滤] 已加载违规词 ${bannedWordRegexes.length} 条`);
+  } catch (error) {
+    bannedWordRegexes = [];
+    console.warn('[内容过滤] 违规词库加载失败，将跳过文本过滤:', error.message);
+  }
+}
+
+function sanitizeText(input) {
+  if (input == null) return '';
+  let text = String(input);
+  if (!text || bannedWordRegexes.length === 0) return text;
+
+  for (const regex of bannedWordRegexes) {
+    text = text.replace(regex, match => '*'.repeat(match.length));
+  }
+  return text;
+}
+
+loadBannedWords();
 
 // -------------------------- 工具函数（抽离通用逻辑）--------------------------
 /**
@@ -653,7 +695,8 @@ class Player {
   constructor(id, ws, nickname = '', emoji = 'smile') {
     this.id = id;
     this.ws = ws;
-    this.nickname = nickname.trim() || getDefaultNickname(id); // 统一默认昵称
+    const sanitizedNickname = sanitizeText(nickname).trim();
+    this.nickname = sanitizedNickname || getDefaultNickname(id); // 统一默认昵称
     this.emoji = emoji;
     this.color = null;
     this.isHost = false;
@@ -1715,7 +1758,7 @@ function handleUpdateNickname(ws, playerId, message) {
     const nickname = message.data?.nickname || message.nickname;
     // 确保nickname是字符串，如果为null/undefined则设置为空字符串
     const nicknameStr = (nickname == null ? '' : String(nickname));
-    const newNickname = nicknameStr.trim() || getDefaultNickname(playerId);
+    const newNickname = sanitizeText(nicknameStr).trim() || getDefaultNickname(playerId);
 
     // 先尝试在游戏会话中查找玩家
     const gameSession = roomManager.getPlayerGameSession(playerId);
@@ -3076,7 +3119,7 @@ function handleNicknameChange(ws, playerId, message) {
   target.broadcast({
     type: 'nicknameChange',
     playerId: targetPlayerId,
-    nickname: message.nickname,
+    nickname: sanitizeText(message.nickname),
     timestamp: message.timestamp
   });
 }
@@ -3628,8 +3671,8 @@ function handleChatMessage(ws, playerId, message) {
     type: 'chatMessage',
     playerId,
     playerNumber: player.color, // 统一用color（1-4）
-    playerName: player.nickname,
-    message: message.message,
+    playerName: sanitizeText(player.nickname),
+    message: sanitizeText(message.message),
     timestamp: message.timestamp || Date.now()
   });
 }

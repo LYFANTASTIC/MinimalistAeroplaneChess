@@ -6,6 +6,7 @@
 // 导入重连管理器
 import { reconnectManager } from './reconnectManager.js';
 import { nicknameGenerator } from './nicknameGenerator.js';
+import { sanitizeUserText } from './contentModeration.js';
 
 class MultiplayerManager {
     constructor() {
@@ -2941,7 +2942,7 @@ class MultiplayerManager {
     }
 
     // 更新昵称
-    updateNickname(nickname) {
+    async updateNickname(nickname) {
         if (!this.wsClient || !this.currentPlayer) return;
 
         // 确保nickname是字符串类型
@@ -2950,7 +2951,7 @@ class MultiplayerManager {
         }
 
         // 允许空昵称，服务器会在开始游戏时生成默认昵称
-        const trimmedNickname = nickname.trim();
+        const trimmedNickname = (await sanitizeUserText(nickname)).trim();
 
         // 使用WebSocketClient的updateNickname方法
         this.wsClient.updateNickname(trimmedNickname);

@@ -25,3 +25,6 @@ dist-ssr
 
 # Poster
 docs/poster/
+
+# Local content moderation dictionary
+frontend/assets/违规词库.txt

@@ -8,6 +8,7 @@ import { gameInfo } from './gameInfo.js';
 import { botController } from './botController.js';
 import { progressDisplay } from './progressDisplay.js';
 import { aiTakeoverManager } from './aiTakeoverManager.js';
+import { sanitizeUserText } from './contentModeration.js';
 
 class EventHandler {
     constructor() {
@@ -1373,12 +1374,13 @@ class EventHandler {
     }
 
     // 处理聊天发送
-    handleChatSend() {
+    async handleChatSend() {
         const chatInput = document.getElementById('chatInput');
         if (chatInput) {
             const message = chatInput.value.trim();
             if (message) {
-                console.log('发送聊天消息:', message);
+                const sanitizedMessage = await sanitizeUserText(message);
+                console.log('发送聊天消息:', sanitizedMessage);
 
                 // 获取当前玩家编号
                 const currentPlayer = window.gameState ? window.gameState.getCurrentPlayer() : 1;
@@ -1387,7 +1389,7 @@ class EventHandler {
                 if (window.multiplayerGameManager && window.multiplayerGameManager.isConnected) {
                     // 游戏中的联机模式
                     window.multiplayerGameManager.sendMessage('chatMessage', {
-                        message: message,
+                        message: sanitizedMessage,
                         playerNumber: currentPlayer,
                         timestamp: Date.now()
                     });
@@ -1395,7 +1397,7 @@ class EventHandler {
                     // 房间中的联机模式
                     window.multiplayerManager.wsClient.send(JSON.stringify({
                         type: 'chatMessage',
-                        message: message,
+                        message: sanitizedMessage,
                         playerNumber: currentPlayer,
                         timestamp: Date.now()
                     }));
@@ -1408,7 +1410,7 @@ class EventHandler {
                         const playerName = window.playerNameManager ?
                             window.playerNameManager.getPlayerName(currentPlayer) :
                             `玩家${currentPlayer}`;
-                        window.gameInfo.addChatMessage(currentPlayer, message, playerName);
+                        window.gameInfo.addChatMessage(currentPlayer, sanitizedMessage, playerName);
                     }
                 }
 
