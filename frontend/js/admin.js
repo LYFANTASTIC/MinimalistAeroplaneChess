@@ -119,9 +119,8 @@ class AdminPanel {
         document.getElementById('playersInRooms').textContent = stats.players.inRooms;
         document.getElementById('playersInSessions').textContent = stats.players.inSessions;
 
-        // 定时器统计
-        const totalTimers = stats.timers.roomDestroyTimers + stats.timers.disconnectTimers;
-        document.getElementById('totalTimers').textContent = totalTimers;
+        // 定时器统计 / 待清理房间统计
+        document.getElementById('totalTimers').textContent = stats.rooms.cleanup || 0;
         document.getElementById('roomTimers').textContent = stats.timers.roomDestroyTimers;
         document.getElementById('disconnectTimers').textContent = stats.timers.disconnectTimers;
     }
@@ -186,10 +185,19 @@ class AdminPanel {
             // 4. 在线状态列
             let onlineInfo = '-';
             if (session) {
-                const onlineCount = session.players.filter(p => p.isConnected).length;
-                const totalCount = session.players.length;
-                const onlineClass = onlineCount === totalCount ? 'all-online' : 'partial-online';
-                onlineInfo = `<span class="online-status ${onlineClass}" style="padding:2px 6px; font-size:11px;">${onlineCount}/${totalCount}</span>`;
+                // 有游戏会话：使用会话数据统计真人玩家
+                const realPlayers = session.players.filter(p => !p.isAI);
+                const onlineRealPlayers = realPlayers.filter(p => p.isConnected || p.isAITakeover).length;
+                const totalRealPlayers = realPlayers.length;
+                const onlineClass = totalRealPlayers === 0 ? 'empty-room' : (onlineRealPlayers === totalRealPlayers ? 'all-online' : 'partial-online');
+                onlineInfo = `<span class="online-status ${onlineClass}" style="padding:2px 6px; font-size:11px;">${onlineRealPlayers}/${totalRealPlayers}</span>`;
+            } else {
+                // 无游戏会话：使用房间数据统计真人玩家
+                const realPlayers = room.players.filter(p => !p.isAI);
+                const onlineRealPlayers = realPlayers.filter(p => p.isConnected || p.isAITakeover).length;
+                const totalRealPlayers = realPlayers.length;
+                const onlineClass = totalRealPlayers === 0 ? 'empty-room' : (onlineRealPlayers === totalRealPlayers ? 'all-online' : 'partial-online');
+                onlineInfo = `<span class="online-status ${onlineClass}" style="padding:2px 6px; font-size:11px;">${onlineRealPlayers}/${totalRealPlayers}</span>`;
             }
 
             // 5. 当前回合列

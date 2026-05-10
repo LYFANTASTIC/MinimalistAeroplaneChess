@@ -100,6 +100,7 @@ class TitleManager {
      */
     _determinePlayerTitle(player, gameState, stats, rankings) {
         const titleStats = gameState.titleStats;
+        const ranking = rankings.find(r => r.player === player);
 
         // --- 1. 概率称号 (最高优先级) ---
 
@@ -123,8 +124,8 @@ class TitleManager {
             return this.TITLES.PROBABILITY.INVISIBLE;
         }
 
-        // 顺风行者：整局未发生过反弹
-        if (titleStats.bounceSteps && titleStats.bounceSteps[player] === 0) {
+        // 顺风行者：整局未发生过反弹且获胜（第一名）
+        if (titleStats.bounceSteps && titleStats.bounceSteps[player] === 0 && ranking && ranking.position === 1) {
             return this.TITLES.PROBABILITY.TAILWIND_WALKER;
         }
 
@@ -167,7 +168,6 @@ class TitleManager {
         }
 
         // 逆风翻盘 (冠军，且在超过 60% 的历史快照中处于落后位置)
-        const ranking = rankings.find(r => r.player === player);
         if (ranking && ranking.position === 1 && gameState.progressHistory && gameState.progressHistory.length >= 5) {
             const history = gameState.progressHistory;
             const activePlayers = activePlayerManager.getActivePlayers();

@@ -653,8 +653,8 @@ class Room {
 
   // 序列化
   toJSON() {
-    // 逻辑：如果是在线0人且状态是游戏中，逻辑上属于待清理状态
-    const displayState = (this.gameState === 'playing' && this.players.size === 0) ? 'cleanup' : this.gameState;
+    // 逻辑：如果是在线0人且状态是游戏中或等待中，逻辑上属于待清理状态
+    const displayState = (this.players.size === 0 && (this.gameState === 'playing' || this.gameState === 'waiting')) ? 'cleanup' : this.gameState;
 
     // 尝试获取关联的游戏会话数据
     let sessionData = null;
@@ -3899,6 +3899,7 @@ app.get('/api/stats', (req, res) => {
     }
 
     // 统计房间状态
+    let cleanupRoomsCount = 0;
     for (const room of roomManager.rooms.values()) {
       if (room.gameState === 'waiting') {
         stats.rooms.waiting++;
@@ -3907,7 +3908,14 @@ app.get('/api/stats', (req, res) => {
       } else if (room.gameState === 'finished') {
         stats.rooms.finished = (stats.rooms.finished || 0) + 1;
       }
+      
+      // 如果是在线0人且状态是游戏中或等待中，逻辑上属于待清理状态
+      const displayState = (room.players.size === 0 && (room.gameState === 'playing' || room.gameState === 'waiting')) ? 'cleanup' : room.gameState;
+      if (displayState === 'cleanup') {
+        cleanupRoomsCount++;
+      }
     }
+    stats.rooms.cleanup = cleanupRoomsCount;
 
     res.json({
       success: true,
