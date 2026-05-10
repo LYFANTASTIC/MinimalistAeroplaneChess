@@ -79,7 +79,7 @@ body {
 }
 
 .table-container::-webkit-scrollbar {
-    height: 8px;
+    height: 2px;
 }
 
 .admin-container {

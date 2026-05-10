@@ -9,6 +9,7 @@ const path = require('path');
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
+const ROOM_CHAT_MAX_MESSAGES = 50;
 
 // 中间件
 app.use(express.json());
@@ -452,6 +453,7 @@ class Room {
     this.postGameHostId = null; // 游戏结束后，首次返回房间的玩家ID（用于锁定房主）
     this.settings = { pieceCount: 4, aiPlayers: [], skillMode: false };
     this.spectators = new Set(); // 观战者ID集合
+    this.roomChatHistory = []; // 房间聊天历史（最多50条）
     this.createdAt = Date.now(); // 房间创建时间
     this.addPlayer(hostPlayer);
     // 房主自动准备
@@ -633,6 +635,14 @@ class Room {
     console.log('[房间配置] 更新后的设置:', this.settings);
   }
 
+  appendRoomChatMessage(chatItem) {
+    if (!chatItem || typeof chatItem !== 'object') return;
+    this.roomChatHistory.push(chatItem);
+    if (this.roomChatHistory.length > ROOM_CHAT_MAX_MESSAGES) {
+      this.roomChatHistory = this.roomChatHistory.slice(-ROOM_CHAT_MAX_MESSAGES);
+    }
+  }
+
   // 广播消息
   broadcast(message, excludePlayerId = null) {
     this.players.forEach(player => {
@@ -685,7 +695,8 @@ class Room {
       displayState: displayState,
       gameSession: sessionData,
       playerReadyStatus: Object.fromEntries(this.playerReadyStatus),
-      settings: this.settings
+      settings: this.settings,
+      roomChatHistory: this.roomChatHistory
     };
   }
 }
@@ -2915,6 +2926,21 @@ function handleRejoinGameSession(ws, playerId, message) {
   }
 }
 
+function handleRoomPanelMessage(ws, playerId, message) {
+  const roomCode = roomManager.playerRooms.get(playerId);
+  if (!roomCode) throw new Error('玩家不在任何房间中');
+
+  const room = roomManager.getRoom(roomCode);
+  if (!room) throw new Error('房间不存在');
+
+  room.broadcast({
+    type: 'roomPanelMessage',
+    playerId,
+    message: sanitizeText(message.data?.message || message.message),
+    timestamp: Date.now()
+  });
+}
+
 // 配置棋子数量（需要房主权限）
 const handleConfigurePieceCount = withRoomValidation((ws, playerId, message, room) => {
   const { pieceCount } = message.data;
@@ -3671,15 +3697,35 @@ function handleChatMessage(ws, playerId, message) {
   const player = target.players.get(playerId);
   if (!player) throw new Error('找不到玩家信息');
 
-  // 广播聊天消息
-  target.broadcast({
+  const rawMessage = message?.data?.message ?? message?.message ?? '';
+  const sanitizedMessage = sanitizeText(rawMessage);
+  if (!String(sanitizedMessage).trim()) {
+    return;
+  }
+
+  const chatPayload = {
     type: 'chatMessage',
     playerId,
     playerNumber: player.color, // 统一用color（1-4）
     playerName: sanitizeText(player.nickname),
-    message: sanitizeText(message.message),
-    timestamp: message.timestamp || Date.now()
-  });
+    message: sanitizedMessage,
+    timestamp: message?.data?.timestamp || message?.timestamp || Date.now()
+  };
+
+  // 在房间阶段写入房间聊天历史（保留最近50条）
+  if (target instanceof Room) {
+    target.appendRoomChatMessage({
+      playerId: chatPayload.playerId,
+      playerNumber: chatPayload.playerNumber,
+      playerName: chatPayload.playerName,
+      message: chatPayload.message,
+      timestamp: chatPayload.timestamp,
+      isSystemMessage: false
+    });
+  }
+
+  // 广播聊天消息
+  target.broadcast(chatPayload);
 }
 
 // 音频加载完成（使用游戏会话中间件）

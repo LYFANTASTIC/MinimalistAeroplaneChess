@@ -417,6 +417,47 @@
                                         </div>
                                     </div>
                                 </div>
+
+                                <div class="room-chat-drawer" id="roomChatDrawer">
+                                    <button class="room-chat-toggle" id="roomChatToggleBtn" type="button" title="聊天">
+                                        <svg class="room-chat-toggle-icon" viewBox="0 0 1024 1024" version="1.1"
+                                            xmlns="http://www.w3.org/2000/svg">
+                                            <path
+                                                d="M512 981.33H85.34c-15.85 0-30.38-8.77-37.77-22.81a42.624 42.624 0 0 1 2.6-44.02L135 791.08C75.25 710.5 42.67 612.6 42.67 512 42.67 253.21 253.21 42.67 512 42.67S981.34 253.21 981.34 512 770.8 981.33 512 981.33zM166.44 896H512c211.73 0 384-172.27 384-384S723.73 128 512 128 128 300.27 128 512c0 91.29 32.83 179.9 92.46 249.46 12.58 14.69 13.73 36 2.77 51.94L166.44 896z"
+                                                fill="currentColor"></path>
+                                            <path d="M384 448m-64 0a64 64 0 1 0 128 0 64 64 0 1 0-128 0Z"
+                                                fill="currentColor"></path>
+                                            <path d="M640 448m-64 0a64 64 0 1 0 128 0 64 64 0 1 0-128 0Z"
+                                                fill="currentColor"></path>
+                                        </svg>
+                                        <span class="room-chat-unread-badge" id="roomChatUnreadBadge" aria-hidden="true"></span>
+                                    </button>
+                                    <div class="room-chat-panel">
+                                        <div class="room-chat-header">房间聊天</div>
+                                        <div class="room-chat-messages" id="roomChatMessages"></div>
+                                        <div class="room-chat-input-wrap">
+                                            <button id="roomChatEmojiBtn" class="room-chat-emoji-btn" type="button" title="表情">
+                                                <svg viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg">
+                                                    <path
+                                                        d="M512 85.290667c235.690667 0 426.752 191.061333 426.752 426.752 0 235.648-191.061333 426.709333-426.752 426.709333-235.690667 0-426.752-191.061333-426.752-426.709333C85.248 276.352 276.309333 85.290667 512 85.290667z m0 64a362.752 362.752 0 1 0 0 725.461333A362.752 362.752 0 0 0 512 149.333333zM361.045333 630.784A191.616 191.616 0 0 0 512 704.085333a191.658667 191.658667 0 0 0 150.826667-73.130666 32 32 0 1 1 50.218666 39.68A255.616 255.616 0 0 1 512 768.085333a255.616 255.616 0 0 1-201.216-97.706666 32 32 0 0 1 50.261333-39.594667zM384 373.333333a53.333333 53.333333 0 1 1 0 106.624A53.333333 53.333333 0 0 1 384 373.333333z m256 0a53.333333 53.333333 0 1 1 0 106.624 53.333333 53.333333 0 0 1 0-106.624z"
+                                                        fill="currentColor"></path>
+                                                </svg>
+                                            </button>
+                                            <div id="roomChatEmojiPanel" class="room-chat-emoji-panel">
+                                                <div class="room-chat-emoji-panel-content" id="roomChatEmojiPanelContent"></div>
+                                            </div>
+                                            <input type="text" id="roomChatInput" class="room-chat-input" maxlength="40"
+                                                placeholder="输入聊天内容..." autocomplete="off">
+                                            <button id="roomChatSendBtn" class="room-chat-send-btn" type="button" title="发送">
+                                                <svg viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg">
+                                                    <path
+                                                        d="M883.84 129.493333a43.733333 43.733333 0 0 1 51.84 58.24L673.066667 867.84a43.733333 43.733333 0 0 1-71.04 16l-148.053334-142.08-52.48 52.906667a44.16 44.16 0 0 1-75.52-31.36V618.666667L98.773333 401.066667a43.946667 43.946667 0 0 1 19.413334-74.24z m-92.373333 188.8L441.386667 608.213333l173.866666 166.826667z m-69.12-56.533333l-506.026667 130.56 161.493333 154.88z"
+                                                        fill="currentColor"></path>
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
 
                             <!-- 人机对战配置 -->

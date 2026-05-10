@@ -1986,6 +1986,7 @@ use[href="#checkmark"] {
 
 /* 操控区域容器 */
 .control-content {
+    --control-content-padding-right: 15px;
     flex: 1;
     width: 100%;
     height: 100%;
@@ -2434,6 +2435,10 @@ use[href="#checkmark"] {
 .ai-battle-config {
     width: 100%;
     will-change: opacity;
+}
+
+.online-multiplayer-config {
+    position: relative;
 }
 
 .room-selection,
@@ -2912,6 +2917,290 @@ use[href="#checkmark"] {
 
 .debug-section.show-debug {
     transform: translateY(-50%) translateX(0);
+}
+
+.room-chat-drawer {
+    position: absolute;
+    top: 40%;
+    right: calc(-1 * var(--control-content-padding-right, 10px));
+    transform: translateY(-50%);
+    height: min(360px, calc(100% - 24px));
+    width: 0;
+    max-width: 90%;
+    background: transparent;
+    border: none;
+    border-radius: 12px 0 0 12px;
+    z-index: 100;
+    box-shadow: none;
+    transition: width 0.25s ease;
+    display: none;
+    overflow: visible;
+}
+
+.room-chat-drawer.is-enabled {
+    display: block;
+}
+
+.room-chat-drawer.is-open {
+    width: min(280px, calc(100% - 8px - var(--control-content-padding-right, 10px)));
+    background: #fdfaf7;
+    border: 2px solid var(--border-light);
+    border-right: none;
+    box-shadow: var(--modal-shadow);
+}
+
+.room-chat-toggle {
+    position: absolute;
+    left: -34px;
+    top: 12%;
+    width: 34px;
+    height: 30px;
+    border: 2px solid var(--border-light);
+    border-right: none;
+    border-radius: 10px 0 0 10px;
+    background: #fdfaf7;
+    color: #2d241f;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    overflow: visible;
+}
+
+.room-chat-toggle-icon {
+    width: 18px;
+    height: 18px;
+}
+
+.room-chat-unread-badge {
+    position: absolute;
+    top: 1px;
+    right: 2px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #ff484e;
+    box-sizing: border-box;
+    display: none;
+}
+
+.room-chat-unread-badge.is-visible {
+    display: block;
+}
+
+.room-chat-panel {
+    margin-left: 0;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    height: 100%;
+    box-sizing: border-box;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    overflow: hidden;
+    transition: opacity 0.12s ease;
+}
+
+.room-chat-drawer.is-open .room-chat-panel {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transition-delay: 0.16s;
+}
+
+.room-chat-header {
+    color: #2d241f;
+    font-size: 14px;
+    font-weight: bold;
+    text-align: center;
+}
+
+.room-chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    border: 1.5px solid var(--border-soft);
+    border-radius: 8px;
+    padding: 8px;
+    background: rgba(255, 255, 255, 0.35);
+}
+
+.room-chat-messages::-webkit-scrollbar {
+    width: 5px;
+}
+
+.room-chat-messages::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.room-chat-messages::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.4);
+    border-radius: 3px;
+    transition: background 0.3s ease;
+}
+
+.room-chat-messages::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 0, 0, 0.7);
+}
+
+.room-chat-messages::-webkit-scrollbar-button {
+    display: none;
+    width: 0;
+    height: 0;
+}
+
+.room-chat-item {
+    margin-bottom: 6px;
+    font-size: 12px;
+    line-height: 1.35;
+    word-break: break-word;
+    color: #2d241f;
+}
+
+.room-chat-item:last-child {
+    margin-bottom: 0;
+}
+
+.room-chat-name {
+    font-weight: bold;
+    margin-right: 4px;
+}
+
+.room-chat-input-wrap {
+    position: relative;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.room-chat-emoji-btn {
+    width: 30px;
+    height: 30px;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: #2d241f;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 0;
+    line-height: 0;
+    flex-shrink: 0;
+    transition: transform 0.2s ease;
+    transform-origin: center;
+}
+
+.room-chat-emoji-btn svg {
+    width: 20px;
+    height: 20px;
+}
+
+.room-chat-input {
+    flex: 1;
+    min-width: 0;
+    border: 1.5px solid var(--border-light);
+    border-radius: 8px;
+    background: transparent;
+    padding: 5px 8px;
+    color: #2d241f;
+    font-size: 13px;
+}
+
+.room-chat-send-btn {
+    width: 30px;
+    height: 30px;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: #2d241f;
+    padding: 0;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 0;
+    flex-shrink: 0;
+    transition: transform 0.2s ease;
+    transform-origin: center;
+}
+
+.room-chat-send-btn svg {
+    width: 20px;
+    height: 20px;
+}
+
+.room-chat-emoji-panel {
+    position: absolute;
+    left: 0;
+    bottom: 38px;
+    width: 257px;
+    max-height: 132px;
+    background: #fefcfa;
+    border: 1.5px solid var(--border-light);
+    border-radius: 4px;
+    display: none;
+    z-index: 300;
+}
+
+.room-chat-emoji-panel.is-open {
+    display: block;
+}
+
+.room-chat-emoji-panel-content {
+    padding: 6px;
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 4px;
+    max-height: 118px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-soft) transparent;
+}
+
+.room-chat-emoji-panel-content::-webkit-scrollbar {
+    width: 4px;
+}
+
+.room-chat-emoji-panel-content::-webkit-scrollbar-track {
+    background: transparent;
+    border-radius: 3px;
+}
+
+.room-chat-emoji-panel-content::-webkit-scrollbar-thumb {
+    background: var(--border-soft);
+    border-radius: 3px;
+}
+
+.room-chat-emoji-item {
+    width: 26px;
+    height: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+    font-size: 18px;
+    user-select: none;
+    background: transparent;
+}
+
+.room-chat-emoji-item:hover {
+    background: rgba(200, 195, 185, 0.3);
+    transform: scale(1.1);
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .room-chat-emoji-btn:hover {
+        transform: scale(1.1);
+    }
+
+    .room-chat-send-btn:hover {
+        transform: scale(1.1);
+    }
 }
 
 .debug-controls {
@@ -4071,6 +4360,7 @@ use[href="#checkmark"] {
 }
 
 .index-content .control-content {
+    --control-content-padding-right: 10px;
     width: 100%;
     padding: 10px;
     background: var(--bg-medium);
@@ -5866,6 +6156,16 @@ use[href="#checkmark"] {
 
     .rules-modal-content {
         max-width: 70%;
+    }
+
+    .room-chat-drawer {
+        height: min(320px, calc(100% - 16px));
+        width: 0;
+        max-width: 94%;
+    }
+
+    .room-chat-drawer.is-open {
+        width: min(250px, calc(100% - 6px - var(--control-content-padding-right, 10px)));
     }
 
     .username-input-group {

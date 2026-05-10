@@ -44,6 +44,11 @@ class MultiplayerManager {
 
         this._reconnectRoomCode = null;
 
+        this.roomChatMessages = [];
+        this.roomChatMaxCount = 50;
+        this.roomChatOpen = false;
+        this.roomChatUnreadCount = 0;
+
 
 
         this.init();
@@ -580,6 +585,236 @@ class MultiplayerManager {
             playerReadyBtn.addEventListener('click', this.playerReadyHandler);
         }
 
+        this.initRoomChatUI();
+
+    }
+
+    initRoomChatUI() {
+        const toggleBtn = document.getElementById('roomChatToggleBtn');
+        const sendBtn = document.getElementById('roomChatSendBtn');
+        const input = document.getElementById('roomChatInput');
+        const emojiBtn = document.getElementById('roomChatEmojiBtn');
+        const emojiPanel = document.getElementById('roomChatEmojiPanel');
+        const emojiPanelContent = document.getElementById('roomChatEmojiPanelContent');
+        if (!toggleBtn || !sendBtn || !input || !emojiBtn || !emojiPanel || !emojiPanelContent) {
+            return;
+        }
+
+        this.initRoomChatEmojiPanel(emojiPanelContent);
+        this.updateRoomChatUnreadBadge();
+
+        if (!this.roomChatToggleHandler) {
+            this.roomChatToggleHandler = () => this.toggleRoomChatDrawer();
+            toggleBtn.addEventListener('click', this.roomChatToggleHandler);
+        }
+
+        if (!this.roomChatSendHandler) {
+            this.roomChatSendHandler = () => this.sendRoomChatMessage();
+            sendBtn.addEventListener('click', this.roomChatSendHandler);
+        }
+
+        if (!this.roomChatInputEnterHandler) {
+            this.roomChatInputEnterHandler = (event) => {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    this.sendRoomChatMessage();
+                }
+            };
+            input.addEventListener('keydown', this.roomChatInputEnterHandler);
+        }
+
+        if (!this.roomChatEmojiHandler) {
+            this.roomChatEmojiHandler = (event) => {
+                event.stopPropagation();
+                this.toggleRoomChatEmojiPanel();
+            };
+            emojiBtn.addEventListener('click', this.roomChatEmojiHandler);
+        }
+
+        if (!this.roomChatEmojiPanelClickHandler) {
+            this.roomChatEmojiPanelClickHandler = (event) => event.stopPropagation();
+            emojiPanel.addEventListener('click', this.roomChatEmojiPanelClickHandler);
+        }
+
+        if (!this.roomChatDocumentClickHandler) {
+            this.roomChatDocumentClickHandler = () => this.hideRoomChatEmojiPanel();
+            document.addEventListener('click', this.roomChatDocumentClickHandler);
+        }
+    }
+
+    updateRoomChatVisibility(enabled) {
+        const drawer = document.getElementById('roomChatDrawer');
+        if (!drawer) return;
+        drawer.classList.toggle('is-enabled', !!enabled);
+        if (!enabled) {
+            drawer.classList.remove('is-open');
+            this.roomChatOpen = false;
+            this.clearRoomChatUnread();
+            this.hideRoomChatEmojiPanel();
+        }
+    }
+
+    toggleRoomChatDrawer(forceValue = null) {
+        const drawer = document.getElementById('roomChatDrawer');
+        if (!drawer || !drawer.classList.contains('is-enabled')) return;
+        const next = forceValue == null ? !this.roomChatOpen : !!forceValue;
+        this.roomChatOpen = next;
+        drawer.classList.toggle('is-open', next);
+        if (next) {
+            this.clearRoomChatUnread();
+        }
+        if (!next) {
+            this.hideRoomChatEmojiPanel();
+        }
+    }
+
+    initRoomChatEmojiPanel(panelContent) {
+        if (this.roomChatEmojiPanelInited || !panelContent) return;
+        const fontEmojis = [
+            '😄', '😉', '😏', '😎', '🙂', '😜',
+            '🤣', '😂', '🥳', '😌', '😇', '😝',
+            '👍', '👌', '✌️', '🤝', '🙏', '👊',
+            '😴', '😐', '😕', '😬', '😁', '😃',
+            '🤨', '😯', '🥰', '😙', '🖐️', '🤜',
+            '🤞', '😑'
+        ];
+        panelContent.innerHTML = '';
+        fontEmojis.forEach((emoji) => {
+            const emojiItem = document.createElement('div');
+            emojiItem.className = 'room-chat-emoji-item';
+            emojiItem.textContent = emoji;
+            emojiItem.addEventListener('click', (event) => {
+                event.stopPropagation();
+                this.insertRoomChatEmoji(emoji);
+                this.hideRoomChatEmojiPanel();
+            });
+            panelContent.appendChild(emojiItem);
+        });
+        this.roomChatEmojiPanelInited = true;
+    }
+
+    clearRoomChatHistory() {
+        this.roomChatMessages = [];
+        this.clearRoomChatUnread();
+        this.renderRoomChatMessages();
+    }
+
+    getRoomChatPlayerName(playerName, playerNumber, playerId) {
+        if (playerName) return playerName;
+        const byId = playerId ? this.players.get(playerId) : null;
+        if (byId?.nickname) return byId.nickname;
+        if (typeof playerNumber === 'number') return `玩家${playerNumber}`;
+        return '系统';
+    }
+
+    getRoomChatNameColorClass(playerNumber) {
+        const colorIndex = Number(playerNumber);
+        if ([1, 2, 3, 4].includes(colorIndex)) {
+            return `player-${colorIndex}-name`;
+        }
+        return '';
+    }
+
+    appendRoomChatMessage(
+        { playerName, playerNumber = null, playerId = null, message = '', isSystem = false, timestamp = Date.now() },
+        options = {}
+    ) {
+        const text = String(message || '').trim();
+        if (!text) return;
+
+        const normalizedPlayerNumber = [1, 2, 3, 4].includes(Number(playerNumber))
+            ? Number(playerNumber)
+            : null;
+
+        const name = isSystem ? '系统' : this.getRoomChatPlayerName(playerName, normalizedPlayerNumber, playerId);
+        this.roomChatMessages.push({ name, message: text, playerNumber: normalizedPlayerNumber, isSystem, timestamp });
+        if (this.roomChatMessages.length > this.roomChatMaxCount) {
+            this.roomChatMessages = this.roomChatMessages.slice(-this.roomChatMaxCount);
+        }
+        if (options.markUnread && !this.roomChatOpen) {
+            this.roomChatUnreadCount = Math.min(this.roomChatUnreadCount + 1, 99);
+            this.updateRoomChatUnreadBadge();
+        }
+        this.renderRoomChatMessages();
+    }
+
+    clearRoomChatUnread() {
+        if (this.roomChatUnreadCount === 0) return;
+        this.roomChatUnreadCount = 0;
+        this.updateRoomChatUnreadBadge();
+    }
+
+    updateRoomChatUnreadBadge() {
+        const badge = document.getElementById('roomChatUnreadBadge');
+        if (!badge) return;
+        badge.classList.toggle('is-visible', this.roomChatUnreadCount > 0);
+    }
+
+    renderRoomChatMessages() {
+        const container = document.getElementById('roomChatMessages');
+        if (!container) return;
+        container.innerHTML = '';
+
+        for (const item of this.roomChatMessages) {
+            const row = document.createElement('div');
+            row.className = 'room-chat-item';
+            const safeName = this.escapeHtml(item.name);
+            const safeText = this.escapeHtml(item.message);
+            if (item.isSystem) {
+                row.innerHTML = `<span class="system-message-text">${safeText}</span>`;
+            } else {
+                const nameColorClass = this.getRoomChatNameColorClass(item.playerNumber);
+                row.innerHTML = `<span class="room-chat-name ${nameColorClass}">${safeName}:</span><span>${safeText}</span>`;
+            }
+            container.appendChild(row);
+        }
+        container.scrollTop = container.scrollHeight;
+    }
+
+    sendRoomChatMessage() {
+        const input = document.getElementById('roomChatInput');
+        if (!input) return;
+        const text = String(input.value || '').trim();
+        if (!text) return;
+
+        if (!this.wsClient || !this.wsClient.isConnected) {
+            this.showError('连接未就绪，暂时无法发送');
+            return;
+        }
+
+        this.wsClient.sendMessage('chatMessage', {
+            message: text,
+            timestamp: Date.now()
+        });
+        input.value = '';
+    }
+
+    toggleRoomChatEmojiPanel() {
+        const emojiPanel = document.getElementById('roomChatEmojiPanel');
+        if (!emojiPanel) return;
+        emojiPanel.classList.toggle('is-open');
+    }
+
+    hideRoomChatEmojiPanel() {
+        const emojiPanel = document.getElementById('roomChatEmojiPanel');
+        if (!emojiPanel) return;
+        emojiPanel.classList.remove('is-open');
+    }
+
+    insertRoomChatEmoji(emoji) {
+        const input = document.getElementById('roomChatInput');
+        if (!input) return;
+        input.value = `${input.value}${emoji}`.slice(0, 40);
+        input.focus();
+    }
+
+    escapeHtml(value) {
+        return String(value)
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#39;');
     }
 
     initEmojiSwitcher() {
@@ -838,6 +1073,10 @@ class MultiplayerManager {
         this.wsClient.onMessageType('kicked', (message) => {
             this.handleWebSocketMessage(message);
         });
+
+        this.wsClient.onMessageType('roomPanelMessage', (message) => {
+            this.handleWebSocketMessage(message);
+        });
     }
 
     requestReconnectInfo() {
@@ -1010,6 +1249,7 @@ class MultiplayerManager {
 
             case 'roomCreated': {
                 console.log('房间创建成功:', data.room ? data.room.code : 'unknown');
+                this.clearRoomChatHistory();
 
                 // 清除超时定时器
                 if (this.createRoomTimeout) {
@@ -1176,6 +1416,7 @@ class MultiplayerManager {
             case 'roomJoined': {
                 console.log('成功加入房间:', data.room.code);
                 this.hideJoinRoomModal(); // 成功加入房间后关闭模态框
+                this.clearRoomChatHistory();
 
                 // 保存房间数据
                 this.currentRoom = data.room;
@@ -1749,29 +1990,20 @@ class MultiplayerManager {
                 break;
 
             case 'chatMessage':
-                // 添加详细的调试日志
-                console.log('房间收到聊天消息:', {
-                    message: data.message,
+                {
+                const localPlayerId = this.wsClient ? this.wsClient.playerId : null;
+                const isLocalMessage = !!(data.playerId && localPlayerId && data.playerId === localPlayerId);
+                this.appendRoomChatMessage({
+                    playerName: data.playerName || data.senderName,
                     playerNumber: data.playerNumber,
                     playerId: data.playerId,
-                    playerName: data.playerName,
-                    senderName: data.senderName,
-                    fullData: data
+                    message: data.message,
+                    isSystem: data.playerNumber == null
+                }, {
+                    markUnread: !isLocalMessage
                 });
-
-                // 调用eventHandler的showChatMessage方法显示消息
-                // 传递服务器提供的playerName而不是依赖本地playerNameManager
-                if (window.eventHandler) {
-                    window.eventHandler.showChatMessage(data.message, data.playerNumber, data.playerName);
-                } else {
-                    console.warn('eventHandler 不存在，无法显示聊天消息');
-                }
-
-                // 同时添加到游戏信息（如果在游戏中）
-                if (window.gameInfo) {
-                    window.gameInfo.addChatMessage(data.playerNumber, data.message, data.playerName, true);
-                }
                 break;
+                }
 
             case 'settingsUpdated': {
                 console.log('[配置] 收到房间设置更新:', data.settings);
@@ -2261,6 +2493,7 @@ class MultiplayerManager {
         // 立即切换到房间配置页面
         document.getElementById('roomSelection').style.display = 'none';
         document.getElementById('roomConfig').style.display = 'flex';
+        this.updateRoomChatVisibility(true);
 
         // 设置临时房间信息，显示加载状态
         this.roomCode = '创建中...';
@@ -2583,6 +2816,7 @@ class MultiplayerManager {
     showRoomConfig() {
         document.getElementById('roomSelection').style.display = 'none';
         document.getElementById('roomConfig').style.display = 'flex';
+        this.updateRoomChatVisibility(true);
 
         this.stopPublicRoomsAutoRefresh();
         this.updateConfigHeaderTitle();
@@ -2595,6 +2829,7 @@ class MultiplayerManager {
         this.ensureOnlineMultiplayerPanelVisible();
         document.getElementById('roomConfig').style.display = 'none';
         document.getElementById('roomSelection').style.display = 'flex';
+        this.updateRoomChatVisibility(false);
 
         this.requestPublicRooms();
         this.startPublicRoomsAutoRefresh();
@@ -4275,6 +4510,7 @@ class MultiplayerManager {
         if (onlineMultiplayerConfig) {
             onlineMultiplayerConfig.style.display = 'none';
         }
+        this.updateRoomChatVisibility(false);
     }
 
     // 显示错误信息
@@ -4288,6 +4524,7 @@ class MultiplayerManager {
     destroy() {
         this.isDestroyed = true;
         this.isLeavingRoom = true; // 标记正在离开，避免重连
+        this.updateRoomChatVisibility(false);
 
         this.disableRoomBackGuard();
 
@@ -4315,6 +4552,28 @@ class MultiplayerManager {
                 playerReadyBtn.removeEventListener('click', this.playerReadyHandler);
             }
             this.playerReadyHandler = null;
+        }
+
+        if (this.roomChatToggleHandler) {
+            const toggleBtn = document.getElementById('roomChatToggleBtn');
+            if (toggleBtn) {
+                toggleBtn.removeEventListener('click', this.roomChatToggleHandler);
+            }
+            this.roomChatToggleHandler = null;
+        }
+        if (this.roomChatSendHandler) {
+            const sendBtn = document.getElementById('roomChatSendBtn');
+            if (sendBtn) {
+                sendBtn.removeEventListener('click', this.roomChatSendHandler);
+            }
+            this.roomChatSendHandler = null;
+        }
+        if (this.roomChatInputEnterHandler) {
+            const chatInput = document.getElementById('roomChatInput');
+            if (chatInput) {
+                chatInput.removeEventListener('keydown', this.roomChatInputEnterHandler);
+            }
+            this.roomChatInputEnterHandler = null;
         }
 
         // 清理连接监控定时器
@@ -4347,6 +4606,7 @@ class MultiplayerManager {
         this.pieceCount = 4;
         this.aiPlayers.clear();
         this.aiDifficulties.clear();
+        this.roomChatMessages = [];
 
         // 清理所有缓存数据
         sessionStorage.removeItem('multiplayerRoomCode');
