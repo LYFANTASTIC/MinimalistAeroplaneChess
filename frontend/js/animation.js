@@ -262,11 +262,6 @@ class Animation {
         }
         chess.finished = false;
 
-        // 在线多人模式下同步回归起点动画（除非明确跳过同步）
-        if (!skipSync && this.gameState.isOnlineMultiplayer && window.gameInstance && window.gameInstance.multiplayerGameManager) {
-            window.gameInstance.multiplayerGameManager.syncMoveChessToStart(player, chessIndex, 'beat');
-        }
-
         if (!chess.element || !startPos) {
             return;
         }
@@ -285,6 +280,11 @@ class Animation {
         const needsAnimation = Math.abs(currentX - targetX) > 1 || Math.abs(currentY - targetY) > 1;
         
         const executeAnimation = () => {
+            // 动画真正开始时再同步，避免远端先于本地回城造成“提前回城”视觉错序
+            if (!skipSync && this.gameState.isOnlineMultiplayer && window.gameInstance && window.gameInstance.multiplayerGameManager) {
+                window.gameInstance.multiplayerGameManager.syncMoveChessToStart(player, chessIndex, 'beat');
+            }
+
             if (needsAnimation) {
                 // 临时禁用CSS transition，使用JavaScript动画实现直线移动
                 chess.element.classList.add('no-transition');

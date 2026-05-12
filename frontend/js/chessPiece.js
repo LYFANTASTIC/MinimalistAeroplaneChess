@@ -972,6 +972,7 @@ class ChessPiece {
      */
     async performFlyingChess(player, chessIndex, targetPosition, checkBeat = true, check53Beat = true, showInfo = true, playSound = true) {
         const chess = this.gameState.playerChess[player][chessIndex];
+        const isRemoteDiceMove = this.gameState.isRemoteDice === true;
         
         const startAbsolutePosition = this.utils.getAbsolutePosition(player, chess.position);
         const targetAbsolutePosition = this.utils.getAbsolutePosition(player, targetPosition);
@@ -1069,7 +1070,7 @@ class ChessPiece {
                     },
                     true,
                     true,
-                    false,
+                    isRemoteDiceMove,
                     true,
                     ANIMATION_DELAY.BEAT_HOME_FLY_MID
                 );
@@ -1090,7 +1091,7 @@ class ChessPiece {
                 // console.log(`[Beat操作-飞棋终点] 玩家${player}打败玩家${p}在终点位置${targetPosition}的棋子${i}`);
                 // 飞棋到达终点后的击败，给一定的延迟
                 this.animation.moveChessToStart(p, i, null, false, ANIMATION_DELAY.BEAT_HOME_FLY_END, true);
-            }, true, true, false, false, ANIMATION_DELAY.BEAT_HOME_FLY_END);
+            }, true, true, isRemoteDiceMove, false, ANIMATION_DELAY.BEAT_HOME_FLY_END);
         }
     }
 

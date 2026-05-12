@@ -15,6 +15,8 @@ class SkillManager {
         this.currentNotification = null;
         this.notificationTimeout = null;
         this.hintTimer = null;
+        this.notificationAnchorCenterX = null;
+        this.layoutCompensationX = 0;
     }
 
     /**
@@ -63,6 +65,38 @@ class SkillManager {
 
         // 启动提示定时器
         this.startHintTimer();
+
+        // 记录初始化基准中心点，并在窗口变化后重置基准
+        this.cacheNotificationAnchor();
+        if (!this._onResizeReanchor) {
+            this._onResizeReanchor = () => {
+                this.notificationAnchorCenterX = null;
+                this.applyLayoutCompensation(0);
+                this.cacheNotificationAnchor();
+            };
+            window.addEventListener('resize', this._onResizeReanchor);
+        }
+    }
+
+    cacheNotificationAnchor() {
+        requestAnimationFrame(() => {
+            const gameContainer = document.querySelector('.game-container');
+            if (!gameContainer) return;
+            const rect = gameContainer.getBoundingClientRect();
+            this.notificationAnchorCenterX = rect.left + rect.width / 2;
+        });
+    }
+
+    applyLayoutCompensation(offsetX) {
+        const mainLayout = document.querySelector('.main-layout');
+        if (!mainLayout) return;
+        if (Math.abs(offsetX) < 0.5) {
+            mainLayout.style.transform = '';
+            this.layoutCompensationX = 0;
+            return;
+        }
+        mainLayout.style.transform = `translateX(${offsetX}px)`;
+        this.layoutCompensationX = offsetX;
     }
 
     /**
@@ -480,6 +514,9 @@ class SkillManager {
      */
     activateTeleport(player) {
         console.log(`玩家${player}激活传送门道具`);
+
+        // 记录传送门使用信息（包括AI），确保gameInfo中有完整轨迹
+        this.sendSkillUsageInfo(player, '传送门');
 
         // 在骰子位置显示传送门图标
         this.showTeleportIcon();
@@ -1060,11 +1097,16 @@ class SkillManager {
         notification.style.width = 'max-content';
         targetContainer.appendChild(notification);
 
-        // 动态计算在屏幕上的居中位置，对齐棋盘容器
+        // 使用初始化时记录的棋盘中心作为通知锚点，避免运行中基准漂移
         if (gameContainer) {
             const rect = gameContainer.getBoundingClientRect();
-            // 让通知的中心点对齐棋盘的中心点
-            const centerLeft = rect.left + rect.width / 2;
+            const currentCenter = rect.left + rect.width / 2;
+            if (this.notificationAnchorCenterX === null) {
+                this.notificationAnchorCenterX = currentCenter;
+            }
+            const drift = this.notificationAnchorCenterX - currentCenter;
+            this.applyLayoutCompensation(drift);
+            const centerLeft = this.notificationAnchorCenterX;
             notification.style.left = `${centerLeft}px`;
         }
 

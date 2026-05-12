@@ -124,6 +124,11 @@ class BotController {
             return false;
         }
 
+        // 传送门模式下禁止掷骰：该阶段必须走“选棋传送”流程
+        if (window.gameInstance?.isTeleportMode || gameState.getDiceValue() === 999) {
+            return false;
+        }
+
         // 检查是否为联机模式
         let isOnlineMultiplayer = gameState.getIsOnlineMultiplayer();
 
@@ -168,6 +173,11 @@ class BotController {
 
         // 再次检查游戏是否在延迟期间被暂停
         if (gameState.getIsPaused()) {
+            return false;
+        }
+
+        // 二次防护：若思考期间进入了传送门模式，直接退出掷骰流程
+        if (window.gameInstance?.isTeleportMode || gameState.getDiceValue() === 999) {
             return false;
         }
 
@@ -1296,6 +1306,12 @@ class BotController {
         this.lastProcessedPhase = gamePhase;
 
         try {
+            // 传送门模式优先执行选棋，避免因阶段竞争误入掷骰分支
+            if (window.gameInstance?.isTeleportMode || gameState.getDiceValue() === 999) {
+                await this.autoSelectChess();
+                return;
+            }
+
             // 根据游戏阶段执行相应操作
             switch (gamePhase) {
                 case 'waiting':
