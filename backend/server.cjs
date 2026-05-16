@@ -553,6 +553,10 @@ class Room {
           message: '所有人类玩家已离线，游戏已暂停。5分钟内重连可继续游戏。',
           timestamp: Date.now()
         });
+      } else {
+        // 如果是等待中或已结束，直接走立即销毁逻辑
+        console.log(`房间 ${this.code} (状态: ${this.gameState}) 无人类玩家，准备立即销毁`);
+        roomManager.immediateDestroyRoom(this.code);
       }
     } else {
       // 还有人类玩家，取消销毁计时器
@@ -782,50 +786,81 @@ function handlePlayerDisconnect(playerId) {
 
       // 房主转移逻辑
       if (wasHost) {
-        // 找到第一个在线的真实玩家作为新房主
-        let newHost = null;
-        for (const [pId, p] of gameSession.players) {
-          if (pId !== playerId && p.isConnected && !p.isAI) {
-            newHost = p;
-            break;
+        const doTransfer = () => {
+          // 重新检查当前房主是否仍不在线（可能已经重连了）
+          const currentHost = gameSession.players.get(playerId);
+          const currentWs = roomManager.getPlayerConnection(playerId);
+          const isCurrentWsOpen = currentWs && currentWs.readyState === 1;
+          
+          if (currentHost && currentHost.isConnected && isCurrentWsOpen) {
+            console.log(`房主 ${playerId} 已在线，取消房主转移`);
+            return;
           }
-        }
 
-        if (newHost) {
-          console.log(`房主 ${playerId} 断开连接，转移房主给 ${newHost.id}`);
+          // 如果在等待期间，有其他人通过重连已经接管了房主，也不需要再转移了
+          const actualCurrentHost = Array.from(gameSession.players.values()).find(p => p.isHost);
+          if (actualCurrentHost && actualCurrentHost.id !== playerId && actualCurrentHost.isConnected) {
+             console.log(`房主已变更为 ${actualCurrentHost.id}，取消转移`);
+             return;
+          }
+
+          // 找到第一个在线且WebSocket真实打开的真实玩家作为新房主
+          let newHost = null;
           for (const [pId, p] of gameSession.players) {
-            if (p) p.isHost = (pId === newHost.id);
-          }
-          gameSession.hostId = newHost.id;
-
-          // 同步更新Room中的房主（如果房间存在）
-          if (gameSession.roomCode) {
-            const room = roomManager.getRoom(gameSession.roomCode);
-            if (room) {
-              const roomNewHost = room.players.get(newHost.id);
-              if (roomNewHost) {
-                room.host = roomNewHost;
-                for (const p of room.players.values()) {
-                  if (p) p.isHost = (p.id === roomNewHost.id);
-                }
-                console.log(`房间 ${room.code} 房主已同步更新为 ${newHost.id}`);
-              }
+            const pWs = roomManager.getPlayerConnection(pId);
+            const isWsOpen = pWs && pWs.readyState === 1;
+            if (pId !== playerId && p.isConnected && isWsOpen && !p.isAI) {
+              newHost = p;
+              break;
             }
           }
 
-          // 广播房主变更消息
-          gameSession.broadcast({
-            type: 'hostChanged',
-            oldHostId: playerId,
-            newHostId: newHost.id,
-            newHostNickname: newHost.nickname,
-            gameSession: gameSession.toJSON(),
-            timestamp: Date.now()
-          });
+          if (newHost) {
+            console.log(`房主 ${playerId} 离线，转移房主给 ${newHost.id}`);
+            for (const [pId, p] of gameSession.players) {
+              if (p) p.isHost = (pId === newHost.id);
+            }
+            gameSession.hostId = newHost.id;
 
-          console.log(`新房主: ${newHost.id} (${newHost.nickname})`);
+            // 同步更新Room中的房主（如果房间存在）
+            if (gameSession.roomCode) {
+              const room = roomManager.getRoom(gameSession.roomCode);
+              if (room) {
+                const roomNewHost = room.players.get(newHost.id);
+                if (roomNewHost) {
+                  room.host = roomNewHost;
+                  for (const p of room.players.values()) {
+                    if (p) p.isHost = (p.id === roomNewHost.id);
+                  }
+                  console.log(`房间 ${room.code} 房主已同步更新为 ${newHost.id}`);
+                }
+              }
+            }
+
+            // 广播房主变更消息
+            gameSession.broadcast({
+              type: 'hostChanged',
+              oldHostId: playerId,
+              newHostId: newHost.id,
+              newHostNickname: newHost.nickname,
+              gameSession: gameSession.toJSON(),
+              timestamp: Date.now()
+            });
+
+            console.log(`新房主: ${newHost.id} (${newHost.nickname})`);
+          } else {
+            console.log(`房主 ${playerId} 断开连接，但没有其他在线玩家可以接管`);
+          }
+        };
+
+        const timeSinceStart = Date.now() - (gameSession.createdAt || 0);
+        const isInitialLoading = timeSinceStart < 15000;
+
+        if (isInitialLoading) {
+          console.log(`游戏刚开始（加载中），延迟 10 秒后检查是否需要转移房主`);
+          setTimeout(doTransfer, 10000);
         } else {
-          console.log(`房主 ${playerId} 断开连接，但没有其他在线玩家可以接管`);
+          doTransfer();
         }
       }
 
@@ -2134,10 +2169,10 @@ function handleLeaveRoom(ws, playerId, message = {}, isSilentMigration = false) 
     }
 
     // 广播房间更新
-    if (room.players.size > 0) {
+    if (room.hasHumanPlayers()) {
       room.broadcast({ type: 'playerLeft', playerId, room: room.toJSON() });
     } else {
-      console.log(`房间 ${roomCode} 已空，立即销毁`);
+      console.log(`房间 ${roomCode} 已无人类玩家，立即销毁`);
       if (room.gameSessionId) {
         roomManager.removeGameSession(room.gameSessionId);
         room.gameSessionId = null;
@@ -2174,11 +2209,11 @@ function handleLeaveRoom(ws, playerId, message = {}, isSilentMigration = false) 
   }
 
   // 立即广播离开消息（在发送确认之前，确保其他玩家立即收到）
-  if (room.players.size > 0) {
+  if (room.hasHumanPlayers()) {
     room.broadcast({ type: 'playerLeft', playerId, room: room.toJSON() });
   } else {
-    // 空房间立即销毁，不再使用延迟销毁
-    console.log(`房间 ${roomCode} 已空，立即销毁`);
+    // 如果没有人类玩家了（只剩AI或全空），立即销毁
+    console.log(`房间 ${roomCode} 已无人类玩家，立即销毁`);
 
     // 删除游戏会话（如果存在）
     if (room.gameSessionId) {
@@ -2358,6 +2393,22 @@ function handleStartGame(ws, playerId) {
   realPlayers.forEach(player => {
     roomManager.setPlayerConnection(player.id, roomManager.getPlayerConnection(player.id) || ws);
   });
+
+  // 设置强制加载超时，防止有人掉线导致全部卡在加载页
+  setTimeout(() => {
+    const currentSession = roomManager.getGameSession(gameSessionId);
+    if (currentSession) {
+      const realCount = Array.from(currentSession.players.values()).filter(p => !p.isAI).length;
+      if (currentSession.audioLoadedPlayers.size < realCount) {
+        console.log(`[音频加载] 游戏会话 ${gameSessionId} 强制超时，发送 allAudioLoaded`);
+        // 补充所有真实玩家到已加载列表，避免后续重连判定出错
+        for (const [pId, p] of currentSession.players) {
+          if (!p.isAI) currentSession.audioLoadedPlayers.add(pId);
+        }
+        currentSession.broadcast({ type: 'allAudioLoaded', gameSessionId });
+      }
+    }
+  }, 15000);
 
   // 广播游戏开始
   room.broadcast({
@@ -2921,6 +2972,52 @@ function handleRejoinGameSession(ws, playerId, message) {
           isSystemMessage: true,
           timestamp: Date.now()
         }));
+      }
+    }
+  }
+
+  // 检查当前房主是否在线，如果不在线且当前重连的是真实玩家，则接管房主
+  // 仅在游戏稳定期（开始15秒后）才允许重连者主动接管，防止开局加载时的竞争
+  const timeSinceStart = Date.now() - (gameSession.createdAt || 0);
+  if (timeSinceStart >= 15000 && player && !player.isAI) {
+    const currentHost = Array.from(gameSession.players.values()).find(p => p.isHost);
+    
+    // 如果重连的人自己就是房主，并且他成功连上了，那他理所当然保留房主，无需接管逻辑
+    if (currentHost && currentHost.id === playerId) {
+      console.log(`[重连] 房主 ${playerId} 成功归来，继续担任房主`);
+    } else {
+      const hostWs = currentHost ? roomManager.getPlayerConnection(currentHost.id) : null;
+      const isHostOnline = currentHost && currentHost.isConnected && hostWs && hostWs.readyState === 1;
+
+      if (!isHostOnline) {
+        console.log(`[重连] 房主 ${currentHost ? currentHost.id : '无'} 不在线，玩家 ${playerId} 接管房主`);
+        
+        for (const [pId, p] of gameSession.players) {
+          if (p) p.isHost = (pId === playerId);
+        }
+        gameSession.hostId = playerId;
+
+        if (gameSession.roomCode) {
+          const room = roomManager.getRoom(gameSession.roomCode);
+          if (room) {
+            const roomNewHost = room.players.get(playerId);
+            if (roomNewHost) {
+              room.host = roomNewHost;
+              for (const p of room.players.values()) {
+                if (p) p.isHost = (p.id === playerId);
+              }
+            }
+          }
+        }
+
+        gameSession.broadcast({
+          type: 'hostChanged',
+          oldHostId: currentHost ? currentHost.id : null,
+          newHostId: playerId,
+          newHostNickname: player.nickname,
+          gameSession: gameSession.toJSON(),
+          timestamp: Date.now()
+        });
       }
     }
   }
@@ -3955,9 +4052,16 @@ app.get('/api/stats', (req, res) => {
         stats.rooms.finished = (stats.rooms.finished || 0) + 1;
       }
       
-      // 如果是在线0人且状态是游戏中或等待中，逻辑上属于待清理状态
-      const displayState = (room.players.size === 0 && (room.gameState === 'playing' || room.gameState === 'waiting')) ? 'cleanup' : room.gameState;
-      if (displayState === 'cleanup') {
+      // 如果没有人类玩家且状态是游戏中或等待中，逻辑上属于待清理状态
+      // 或者是没有任何玩家（连AI都没有）的空房间
+      const noHumanPlayers = !room.hasHumanPlayers();
+      const isEmpty = room.players.size === 0;
+      
+      const isCleanupState = 
+        (noHumanPlayers && (room.gameState === 'playing' || room.gameState === 'waiting')) || 
+        (isEmpty && room.gameState === 'finished');
+        
+      if (isCleanupState) {
         cleanupRoomsCount++;
       }
     }
@@ -4037,18 +4141,34 @@ function cleanupOrphanedResources() {
     cleanedSessions++;
   }
 
-  // 2. 清理finished状态且无玩家的房间
-  const finishedEmptyRooms = [];
+  // 2. 清理非游戏进行中且无人类玩家的房间，以及空置超时的游戏房间
+  const emptyRoomsToClean = [];
+  const NOW = Date.now();
   for (const [roomCode, room] of roomManager.rooms.entries()) {
-    if (room.gameState === 'finished') {
-      finishedEmptyRooms.push(roomCode);
-      console.log(`  发现已结束空房间: ${roomCode}`);
+    if (!room.hasHumanPlayers()) {
+      if (room.gameState !== 'playing') {
+        emptyRoomsToClean.push(roomCode);
+        console.log(`  发现无人类玩家的僵尸房间 (${room.gameState}): ${roomCode}`);
+      } else {
+        // 如果是游戏中，但空置时间超过了 6 分钟（5分钟正常定时器+1分钟宽限），作为兜底清理
+        if (room.emptyRoomStartTime && (NOW - room.emptyRoomStartTime > 6 * 60 * 1000)) {
+          emptyRoomsToClean.push(roomCode);
+          console.log(`  发现空置超时的僵尸游戏房间 (${room.gameState}): ${roomCode}`);
+        }
+      }
+    } else if (room.gameState === 'finished') {
+      // 如果房间是finished且没有人类玩家（上面已处理），或者是全空的
+      if (room.players.size === 0) {
+        emptyRoomsToClean.push(roomCode);
+        console.log(`  发现已结束空房间: ${roomCode}`);
+      }
     }
   }
 
-  // 删除已结束的空房间
-  for (const roomCode of finishedEmptyRooms) {
+  // 删除这些房间
+  for (const roomCode of emptyRoomsToClean) {
     const room = roomManager.rooms.get(roomCode);
+    if (!room) continue;
 
     // 清理房间销毁定时器
     if (roomManager.roomDestroyTimers.has(roomCode)) {
