@@ -3713,6 +3713,11 @@ class MultiplayerManager {
 
             } else if (!realPlayer) {
                 // 该位置空闲
+                option.classList.remove('selected');
+                if (colorCircle) {
+                    colorCircle.classList.remove('selected');
+                }
+
                 if (addBtn) addBtn.style.display = 'block';
                 if (playerInfo) playerInfo.style.display = 'none';
                 if (playerNickname) playerNickname.style.display = 'none';
