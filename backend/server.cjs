@@ -119,6 +119,7 @@ class RoomManager {
     const room = new Room(roomCode, hostPlayer, roomName);
     this.rooms.set(roomCode, room);
     this.playerRooms.set(hostPlayer.id, roomCode);
+    this.setPlayerConnection(hostPlayer.id, hostPlayer.ws);
     return room;
   }
 
