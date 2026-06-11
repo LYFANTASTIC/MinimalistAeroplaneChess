@@ -1441,9 +1441,19 @@ body {
 }
 
 .chat-send-btn {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     cursor: pointer;
     transition: all 0.3s ease;
     color: var(--ui-default-color);
+}
+
+.chat-send-btn svg {
+    width: 100%;
+    height: 100%;
 }
 
 .chat-send-btn:hover {
@@ -6594,6 +6604,11 @@ use[href="#checkmark"] {
         width: 24px;
         height: 24px;
         margin-right: 3px;
+    }
+
+    .chat-send-btn {
+        width: 24px;
+        height: 24px;
     }
 
     /* 移动端道具面板样式 */
