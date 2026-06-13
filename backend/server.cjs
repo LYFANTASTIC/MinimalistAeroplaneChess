@@ -1684,6 +1684,14 @@ function handleJoinRoom(ws, playerId, message) {
       }
     }
     ws.send(JSON.stringify(response));
+
+    // 广播重连消息给其他玩家
+    room.broadcast({
+      type: 'playerReconnected',
+      playerId,
+      room: room.toJSON()
+    }, playerId);
+    console.log(`玩家 ${playerId} 重新加入房间 ${roomCode}，广播 playerReconnected`);
     return;
   }
   // 房间满员：计算已占用席位 = 真实玩家 + AI 玩家

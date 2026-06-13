@@ -349,6 +349,7 @@ class ChessPiece {
                     if (this.animation) {
                         this.animation.updateChessPosition(player, chessIndex);
                     }
+                    this.updateAllChessPositions();
 
                     // 淡入效果
                     setTimeout(() => {
@@ -365,6 +366,8 @@ class ChessPiece {
                 if (this.animation) {
                     this.animation.updateChessPosition(player, chessIndex);
                 }
+                // 更新所有棋子位置以重新计算叠子高亮状态
+                this.updateAllChessPositions();
             }
 
             // 更新UI
