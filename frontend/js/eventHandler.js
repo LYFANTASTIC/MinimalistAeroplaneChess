@@ -149,18 +149,19 @@ class EventHandler {
 
     // 设置棋子点击事件
     setupChessEvents() {
-        // 获取所有棋子元素并绑定点击事件
+        const playerChess = gameState.getPlayerChess();
+        const pieceCount = gameState.pieceCount; // 获取当前棋子个数
+
         for (let player = 1; player <= 4; player++) {
-            const chessElements = document.querySelectorAll(`#board-svg use[href="#chess"].player-${player}`);
-            const pieceCount = gameState.pieceCount; // 获取当前棋子个数
             for (let i = 0; i < pieceCount; i++) {
-                if (chessElements[i]) {
+                const element = playerChess[player]?.[i]?.element;
+                if (element) {
                     // 绑定棋子点击事件
-                    chessElements[i].addEventListener('click', (e) => this.handleChessClick(player, i, e));
+                    element.addEventListener('click', (e) => this.handleChessClick(player, i, e));
 
                     // 绑定鼠标悬停事件（可选）
-                    chessElements[i].addEventListener('mouseenter', (e) => this.handleChessHover(player, i, e));
-                    chessElements[i].addEventListener('mouseleave', (e) => this.handleChessLeave(player, i, e));
+                    element.addEventListener('mouseenter', (e) => this.handleChessHover(player, i, e));
+                    element.addEventListener('mouseleave', (e) => this.handleChessLeave(player, i, e));
                 }
             }
         }
@@ -947,14 +948,15 @@ class EventHandler {
         }
 
         // 移除棋子事件
-        const pieceCount = gameState.pieceCount || 4; // 获取当前棋子个数，默认为4
+        const playerChess = gameState.getPlayerChess();
+        const pieceCount = gameState.pieceCount || 4;
         for (let player = 1; player <= 4; player++) {
-            const chessElements = document.querySelectorAll(`#board-svg use[href="#chess"].player-${player}`);
             for (let i = 0; i < pieceCount; i++) {
-                if (chessElements[i]) {
-                    chessElements[i].removeEventListener('click', this.handleChessClick);
-                    chessElements[i].removeEventListener('mouseenter', this.handleChessHover);
-                    chessElements[i].removeEventListener('mouseleave', this.handleChessLeave);
+                const element = playerChess[player]?.[i]?.element;
+                if (element) {
+                    element.removeEventListener('click', this.handleChessClick);
+                    element.removeEventListener('mouseenter', this.handleChessHover);
+                    element.removeEventListener('mouseleave', this.handleChessLeave);
                 }
             }
         }
@@ -966,14 +968,15 @@ class EventHandler {
     // 重新绑定棋子事件（在棋子元素更新后调用）
     rebindChessEvents() {
         // 先移除旧的事件监听器
-        const pieceCount = gameState.pieceCount || 4; // 获取当前棋子个数，默认为4
+        const playerChess = gameState.getPlayerChess();
+        const pieceCount = gameState.pieceCount || 4;
         for (let player = 1; player <= 4; player++) {
-            const chessElements = document.querySelectorAll(`#board-svg use[href="#chess"].player-${player}`);
             for (let i = 0; i < pieceCount; i++) {
-                if (chessElements[i]) {
-                    chessElements[i].removeEventListener('click', this.handleChessClick);
-                    chessElements[i].removeEventListener('mouseenter', this.handleChessHover);
-                    chessElements[i].removeEventListener('mouseleave', this.handleChessLeave);
+                const element = playerChess[player]?.[i]?.element;
+                if (element) {
+                    element.removeEventListener('click', this.handleChessClick);
+                    element.removeEventListener('mouseenter', this.handleChessHover);
+                    element.removeEventListener('mouseleave', this.handleChessLeave);
                 }
             }
         }
@@ -981,9 +984,6 @@ class EventHandler {
         // 重新绑定事件
         this.setupChessEvents();
     }
-
-    // handleThinkingTimeoutWrapper 方法已移除
-    // 统一使用 dice.handleThinkingTimeoutWrapper()
 
     /**
      * 检查当前玩家是否为bot，如果是则触发bot操作

@@ -391,8 +391,7 @@ class GameSession {
     this.players.forEach(player => {
       if (player && !player.isAI) {
         const mappedSessionId = roomManager.playerSessions.get(player.id);
-        // 只有在映射存在且明确指向其他会话时才跳过。
-        if (mappedSessionId && mappedSessionId !== this.gameSessionId) {
+        if (mappedSessionId !== this.gameSessionId) {
           return;
         }
       }
@@ -693,7 +692,8 @@ class Room {
         isHost: p.id === this.host.id,
         isAI: !!p.isAI,
         isReady: this.playerReadyStatus.get(p.id) || false,
-        isConnected: !!p.isConnected
+        isConnected: !!p.isConnected,
+        disconnectedAt: p.disconnectedAt
       })),
       gameState: this.gameState,
       displayState: displayState,
@@ -751,12 +751,10 @@ function withRoomValidation(handler, requireHost = false) {
 function withGameSessionValidation(handler) {
   return (ws, playerId, message) => {
     const gameSession = roomManager.getPlayerGameSession(playerId);
-    if (!gameSession) throw new Error('玩家不在任何游戏会话中');
-
-    const player = gameSession.players.get(playerId);
-    if (!player) throw new Error('玩家不存在于游戏会话中');
-
-    return handler(ws, playerId, message, gameSession, player);
+    if (!gameSession || !gameSession.players.get(playerId)) {
+      return;
+    }
+    return handler(ws, playerId, message, gameSession, gameSession.players.get(playerId));
   };
 }
 

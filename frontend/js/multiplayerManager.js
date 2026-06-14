@@ -1447,6 +1447,11 @@ class MultiplayerManager {
                     console.log('[配置] 加入房间时同步道具模式:', data.room.settings.skillMode);
                 }
 
+                // 恢复棋子个数显示
+                if (data.room.settings && data.room.settings.pieceCount) {
+                    this.updatePieceCountDisplay(data.room.settings.pieceCount);
+                }
+
                 this.updateRoomPrivacyToggleUI(!!data.room.isPrivate);
 
                 // 检查房间状态和玩家身份
@@ -1665,6 +1670,7 @@ class MultiplayerManager {
                 this.startOfflineCountdown(data.playerId, 10);
                 this.updatePlayerDisplay();
                 this.updateRoomInfo();
+                this.updateStartGameButton();
                 break;
 
             case 'playerReconnected':
@@ -1843,6 +1849,16 @@ class MultiplayerManager {
 
                     this.updatePlayerDisplay();
                     this.updateRoomInfo();
+
+                    // 重建离线玩家倒计时
+                    for (const [, p] of this.players) {
+                        if (p.isConnected === false && p.disconnectedAt) {
+                            const elapsed = Date.now() - p.disconnectedAt;
+                            const remaining = Math.max(1, Math.ceil((10000 - elapsed) / 1000));
+                            this.startOfflineCountdown(p.id, remaining);
+                        }
+                    }
+                    this.updateStartGameButton();
                     console.log('房间状态已同步');
                 }
                 break;
@@ -3222,6 +3238,11 @@ class MultiplayerManager {
                 }
                 // 清除踢人按钮
                 this.removeKickButtonFromCircle(circle);
+                // 清除离线倒计时遮罩（避免玩家离开后残留）
+                const overlay = circle.querySelector('.offline-countdown-overlay');
+                if (overlay) {
+                    overlay.remove();
+                }
             }
 
             // 重置所有位置为空闲状态
@@ -3301,8 +3322,6 @@ class MultiplayerManager {
                         const remainingSeconds = this.getRemainingOfflineSeconds(player.id);
                         if (remainingSeconds != null) {
                             this.updateOfflineOverlayForPlayer(player.id, remainingSeconds);
-                        } else {
-                            this.updateOfflineOverlayForPlayer(player.id, 10);
                         }
                     } else if (player.isHost) {
                         // 房主显示房主状态
@@ -4001,6 +4020,10 @@ class MultiplayerManager {
             // 房主自动准备
             if (player.isHost) {
                 continue;
+            }
+            // 离线玩家不能开始游戏
+            if (player.isConnected === false) {
+                return false;
             }
             // 检查非房主玩家是否准备
             const isReady = this.playerReadyStatus.get(playerId) || false;

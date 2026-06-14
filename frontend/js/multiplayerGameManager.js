@@ -266,24 +266,44 @@ class MultiplayerGameManager {
         const pieceCount = window.gameState.pieceCount || 4;
         let totalBoundElements = 0;
 
-        // 重新绑定每个玩家的棋子
         for (let player = 1; player <= 4; player++) {
-            if (window.gameState.playerChess[player]) {
-                // 使用正确的CSS选择器获取棋子元素
-                const chessElements = document.querySelectorAll(`#board-svg use[href="#chess"].player-${player}`);
-                for (let chessIndex = 0; chessIndex < window.gameState.playerChess[player].length && chessIndex < chessElements.length; chessIndex++) {
-                    const chess = window.gameState.playerChess[player][chessIndex];
-                    const element = chessElements[chessIndex];
+            if (!window.gameState.playerChess[player]) continue;
 
-                    if (element) {
-                        chess.element = element;
-                        totalBoundElements++;
-                    } else {
-                        console.error(`找不到玩家${player}棋子${chessIndex}的DOM元素`);
-                    }
+            const chessElements = document.querySelectorAll(`#board-svg use[href="#chess"].player-${player}`);
+
+            // 有效棋子绑定：已有引用的保留，没有的按DOM索引匹配
+            for (let chessIndex = 0; chessIndex < pieceCount; chessIndex++) {
+                const chess = window.gameState.playerChess[player][chessIndex];
+                if (!chess) continue;
+
+                if (chess.element && chess.element.parentNode) {
+                    totalBoundElements++;
+                } else if (chessIndex < chessElements.length && chessElements[chessIndex]) {
+                    chess.element = chessElements[chessIndex];
+                    totalBoundElements++;
+                } else {
+                    console.error(`找不到玩家${player}棋子${chessIndex}的DOM元素`);
+                }
+            }
+
+            // 显示/隐藏：不依赖DOM顺序，根据element引用判断
+            const validElements = new Set();
+            for (let chessIndex = 0; chessIndex < pieceCount; chessIndex++) {
+                const chess = window.gameState.playerChess[player][chessIndex];
+                if (chess && chess.element) {
+                    validElements.add(chess.element);
+                }
+            }
+            for (let i = 0; i < chessElements.length; i++) {
+                if (validElements.has(chessElements[i])) {
+                    chessElements[i].style.display = '';
+                } else {
+                    chessElements[i].style.display = 'none';
                 }
             }
         }
+
+        console.log(`[rebindChessElements] 重新绑定了 ${totalBoundElements} 个棋子元素`);
     }
 
     /**
