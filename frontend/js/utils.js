@@ -368,7 +368,7 @@ export function checkStackInPath(currentPlayer, currentPosition, steps, gameStat
 
             // 判断是刚好到达叠子位置还是需要反弹
             const isExactHit = (step === steps); // 刚好到达叠子位置，撞机
-            const needsBounce = (step < steps); // 投出点数大于叠子距离，需要反弹
+            const needsBounce = (step < steps); // 摇到点数大于叠子距离，需要反弹
 
             return {
                 stackPosition: nextPosition,

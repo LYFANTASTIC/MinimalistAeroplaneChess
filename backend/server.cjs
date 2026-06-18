@@ -2554,11 +2554,11 @@ function handleDiceRoll(ws, playerId, message) {
     // 处理连投奖励逻辑
     if (message.diceValue === 6) {
       gameSession.gameData.consecutiveSixes = (gameSession.gameData.consecutiveSixes || 0) + 1;
-      console.log(`玩家连续骰到${gameSession.gameData.consecutiveSixes}次6`);
+      console.log(`玩家连续摇到${gameSession.gameData.consecutiveSixes}次6`);
 
-      // 检查是否连续骰到3次6
+      // 检查是否连续摇到3次6
       if (gameSession.gameData.consecutiveSixes >= 3) {
-        console.log('连续骰到3次6，所有棋子返回起点！');
+        console.log('连续摇到3次6，所有棋子返回起点！');
         gameSession.gameData.canReroll = false;
         gameSession.gameData.justRolledSix = false;
         // 重置连续6的计数
@@ -2618,12 +2618,12 @@ function handleDiceRoll(ws, playerId, message) {
           }
         }, 1000);
       } else {
-        // 骰到6但未达到3次，可以重新投骰
+        // 摇到6但未达到3次，可以重新投骰
         gameSession.gameData.canReroll = true;
         gameSession.gameData.justRolledSix = true;
       }
     } else {
-      // 没有骰到6，重置连续6的计数
+      // 没有摇到6，重置连续6的计数
       gameSession.gameData.consecutiveSixes = 0;
       gameSession.gameData.canReroll = false;
       gameSession.gameData.justRolledSix = false;
@@ -2640,7 +2640,7 @@ function handleDiceRoll(ws, playerId, message) {
     diceValue: message.diceValue,
     consecutiveSixes: gameSession?.gameData?.consecutiveSixes || 0, //同步计数状态，避免前端重复计数
     canReroll: gameSession?.gameData?.canReroll || false, //同步是否可以重投的状态
-    justRolledSix: gameSession?.gameData?.justRolledSix || false, //同步是否刚投出6的状态
+    justRolledSix: gameSession?.gameData?.justRolledSix || false, //同步是否刚摇到6的状态
     timestamp: message.timestamp
   });
 }
@@ -3070,7 +3070,7 @@ function handlePlayerTurnChange(ws, playerId, message) {
     // 检查是否有连投奖励
     if (!forceEndTurn && target.gameData.canReroll && target.gameData.justRolledSix) {
       // 如果有连投奖励，保持当前玩家不变
-      console.log(`玩家${target.gameData.currentPlayer}骰到6点，获得连投奖励，保持回合`);
+      console.log(`玩家${target.gameData.currentPlayer}摇到6点，获得连投奖励，保持回合`);
       target.gameData.gamePhase = 'rolling';
       target.gameData.diceValue = 0;
       target.gameData.justRolledSix = false; // 重置justRolledSix状态

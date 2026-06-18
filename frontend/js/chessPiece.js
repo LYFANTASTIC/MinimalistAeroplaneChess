@@ -1334,7 +1334,7 @@ class ChessPiece {
 
         // 如果可以重新投骰，保持当前玩家；否则切换到下一个玩家
         if (this.gameState.canReroll) {
-            console.log(`玩家${player}骰到6，可以重新投骰`);
+            console.log(`玩家${player}摇到6，可以重新投骰`);
 
             // 延迟显示连投奖励信息，确保所有beat操作完成后再显示
             setTimeout(() => {

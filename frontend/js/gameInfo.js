@@ -490,7 +490,7 @@ class GameInfo {
         if (data.skillName === '遥控骰子' && data.diceValue) {
             extraInfo = `<span class="action-text">，选择了 </span><span class="dice-special">${data.diceValue}</span><span class="action-text"> 点</span>`;
         } else if (data.skillName === '多面骰子' && data.diceValue) {
-            extraInfo = `<span class="action-text">，投出了 </span><span class="dice-special">${data.diceValue}</span><span class="action-text"> 点</span>`;
+            extraInfo = `<span class="action-text">，摇到了 </span><span class="dice-special">${data.diceValue}</span><span class="action-text"> 点</span>`;
         } else if (data.skillName === '传送门' && data.moveType === 'teleport') {
             const fromPos = data.fromPosition === -1 ? 0 : data.fromPosition;
             const toPos = data.toPosition;
@@ -706,6 +706,8 @@ class GameInfo {
 
     // 便捷方法：添加游戏开始信息
     addGameStart(currentPlayer, skipSync = false) {
+        // 当前玩家为空时跳过（观战者等场景）
+        if (currentPlayer == null) return;
         this.addMessage({
             type: 'game_start',
             player: currentPlayer,

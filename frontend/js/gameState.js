@@ -13,7 +13,7 @@ class GameState {
         this.selectedChess = null; // 选中的棋子
         this.winner = null; // 获胜者
         this.isRolling = false; // 防抖标志，防止重复点击骰子
-        this.consecutiveSixes = 0; // 当前回合连续投出6的次数
+        this.consecutiveSixes = 0; // 当前回合连续摇到6的次数
         this.canReroll = false; // 是否可以重新投骰
         this.justRolledSix = false; // 标记是否刚刚掷出了6点
         this.isRemoteDice = false; // 标记是否是遥控骰子（6点不触发连投）
@@ -106,9 +106,9 @@ class GameState {
 
         // 称号相关统计数据
         this.titleStats = {
-            consecutiveOnes: { 1: 0, 2: 0, 3: 0, 4: 0 },    // 连续投出1的次数
+            consecutiveOnes: { 1: 0, 2: 0, 3: 0, 4: 0 },    // 连续摇到1的次数
             consecutiveNoTakeoff: { 1: 0, 2: 0, 3: 0, 4: 0 }, // 连续无法起飞的次数
-            maxConsecutiveSixes: { 1: 0, 2: 0, 3: 0, 4: 0 }, // 最大连续投出6的次数
+            maxConsecutiveSixes: { 1: 0, 2: 0, 3: 0, 4: 0 }, // 最大连续摇到6的次数
             firstFinishedPlayer: null,                       // 首个有棋子到达终点的玩家
             bounceSteps: { 1: 0, 2: 0, 3: 0, 4: 0 }          // 累计反弹格数（终点反弹+叠子反弹）
         };
@@ -423,7 +423,7 @@ class GameState {
             // 如果棋子已完成，跳过
             if (chess.finished) continue;
 
-            // 如果棋子在起始区域，只有投出6才能出发
+            // 如果棋子在起始区域，只有摇到6才能出发
             if (chess.position === -1) {
                 if (diceValue === 6) {
                     movableChess.push(i);

@@ -204,7 +204,7 @@ class Dice {
         // 检查是否是遥控骰子
         const isRemoteDice = this.gameState.isRemoteDice === true;
 
-        // 处理特殊规则：骰到6的情况
+        // 处理特殊规则：摇到6的情况
         if (this.gameState.diceValue === 6) {
             // 遥控骰子的6点不触发连投奖励
             if (isRemoteDice) {
@@ -221,11 +221,11 @@ class Dice {
                     // 单机模式：前端自己管理计数
                     this.gameState.consecutiveSixes++;
                 }
-                console.log(`玩家${this.gameState.currentPlayer}连续骰到${this.gameState.consecutiveSixes}次6`);
+                console.log(`玩家${this.gameState.currentPlayer}连续摇到${this.gameState.consecutiveSixes}次6`);
 
-                // 检查是否连续骰到3次6
+                // 检查是否连续摇到3次6
                 if (this.gameState.consecutiveSixes >= 3) {
-                    console.log(`[警告] 玩家${this.gameState.currentPlayer}连续骰到${this.gameState.consecutiveSixes}次6，触发惩罚！`);
+                    console.log(`[警告] 玩家${this.gameState.currentPlayer}连续摇到${this.gameState.consecutiveSixes}次6，触发惩罚！`);
 
                     const diceDisplay = document.getElementById('diceDisplay');
                     if (diceDisplay) {
@@ -251,14 +251,14 @@ class Dice {
                     this.gameState.isRemoteDice = false;
                     return;
                 } else {
-                    // 骰到6但未达到3次，可以重新投骰
+                    // 摇到6但未达到3次，可以重新投骰
                     this.gameState.canReroll = true;
                     // 标记这次掷出了6，用于后续显示连投奖励
                     this.gameState.justRolledSix = true;
                 }
             }
         } else {
-            // 没有骰到6，重置连续6的计数
+            // 没有摇到6，重置连续6的计数
             this.gameState.consecutiveSixes = 0;
             this.gameState.canReroll = false;
             this.gameState.justRolledSix = false;

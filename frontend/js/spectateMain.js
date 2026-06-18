@@ -99,6 +99,8 @@ class FlyingChessGame {
             eventHandler.setGameInstance(this);
             eventHandler.setupEventListeners();
 
+            this.setupSpectateButtons();
+
             // 4. 处理URL参数，建立连接
             this.handleUrlParameters();
 
@@ -116,14 +118,13 @@ class FlyingChessGame {
      */
     setupAudioAutoPlayFix() {
         const fixAudio = () => {
-            // 播放一个无声片段或直接尝试触发音频上下文
-            if (audioManager.isEnabled) {
-                console.log('用户交互检测到，激活观战模式音效');
-                // 某些浏览器需要通过播放一个音效来激活音频
-                // 这里我们不真的播放，只是确保在交互后音效管理器能正常工作
-                document.removeEventListener('click', fixAudio);
-                document.removeEventListener('touchstart', fixAudio);
+            // 用户首次交互时播放静音片段来解锁音频上下文
+            if (audioManager.isLoaded) {
+                audioManager.playMoveSound();
             }
+            console.log('用户交互检测到，激活观战模式音效');
+            document.removeEventListener('click', fixAudio);
+            document.removeEventListener('touchstart', fixAudio);
         };
 
         document.addEventListener('click', fixAudio);
@@ -137,20 +138,14 @@ class FlyingChessGame {
     }
 
     disableAllControls() {
-        // 隐藏所有交互按钮
-        const controlButtonsGrid = document.querySelector('.control-buttons-grid');
-        if (controlButtonsGrid) controlButtonsGrid.style.display = 'none';
-        
-        const settlementGame = document.getElementById('settlementGame');
-        if (settlementGame) settlementGame.style.display = 'none';
-
+        // 隐藏交互性按钮，保留游戏规则和音效开关
         const skillBtn = document.getElementById('skillBtn');
         if (skillBtn) skillBtn.style.display = 'none';
         const chatBtn = document.getElementById('chatBtn');
         if (chatBtn) chatBtn.style.display = 'none';
-        // 设置所有按钮的disabled状态
+        // 设置所有按钮的disabled状态（保留游戏规则、音效开关、规则弹框关闭按钮可点击）
         document.querySelectorAll('button').forEach(btn => {
-            if (btn.id !== 'returnHome' && btn.id !== 'panelSwitchBtn') {
+            if (btn.id !== 'returnHome' && btn.id !== 'panelSwitchBtn' && btn.id !== 'showRules' && btn.id !== 'toggleAudio' && btn.id !== 'rules-close') {
                 btn.disabled = true;
             }
         });
@@ -159,6 +154,55 @@ class FlyingChessGame {
         if (this.eventHandler) {
             this.eventHandler.setupChessEvents = function() {}; // 覆盖为空函数
             this.eventHandler.rebindChessEvents = function() {};
+        }
+    }
+
+    /**
+     * 观战页面专用按钮绑定
+     * 直接绑定游戏规则和音效开关，避免依赖 eventHandler 的 import 方式
+     */
+    setupSpectateButtons() {
+        // 游戏规则按钮
+        const showRulesBtn = document.getElementById('showRules');
+        if (showRulesBtn) {
+            showRulesBtn.addEventListener('click', () => {
+                const rulesModal = document.getElementById('rules-modal');
+                if (rulesModal) rulesModal.style.display = 'flex';
+            });
+        }
+
+        // 规则模态框关闭按钮
+        const rulesCloseBtn = document.getElementById('rules-close');
+        if (rulesCloseBtn) {
+            rulesCloseBtn.addEventListener('click', () => {
+                const rulesModal = document.getElementById('rules-modal');
+                if (rulesModal) rulesModal.style.display = 'none';
+            });
+        }
+
+        // 点击模态框背景关闭
+        const rulesModal = document.getElementById('rules-modal');
+        if (rulesModal) {
+            rulesModal.addEventListener('click', (e) => {
+                if (e.target === rulesModal) {
+                    rulesModal.style.display = 'none';
+                }
+            });
+        }
+
+        // 音效开关按钮
+        const toggleAudioBtn = document.getElementById('toggleAudio');
+        if (toggleAudioBtn) {
+            toggleAudioBtn.addEventListener('click', () => {
+                if (audioManager.isEnabled) {
+                    audioManager.mute();
+                    toggleAudioBtn.textContent = '开启音效';
+                } else {
+                    audioManager.unmute();
+                    audioManager.playMoveSound();
+                    toggleAudioBtn.textContent = '关闭音效';
+                }
+            });
         }
     }
 

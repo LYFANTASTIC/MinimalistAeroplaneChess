@@ -835,15 +835,22 @@
                                 <div class="mechanism-item launch-item">
                                     <h5><span class="move-type-launch">起飞</span></h5>
                                     <div class="sub-content-item launch-sub-item">
-                                        <p>初始棋子在基地，投出偶数可让1颗棋子<span class="move-type-launch">[起飞]</span>至起飞点。
+                                        <p>初始棋子在基地，摇到偶数可让1颗棋子<span class="move-type-launch">[起飞]</span>至起飞点。
                                         </p>
+                                    </div>
+                                </div>
+
+                                <div class="mechanism-item move-item">
+                                    <h5><span class="move-type-move">移动</span></h5>
+                                    <div class="sub-content-item move-sub-item">
+                                        <p>棋子<span class="move-type-launch">[起飞]</span>后当前摇到的点数就是棋子可以前进的格数。</p>
                                     </div>
                                 </div>
 
                                 <div class="mechanism-item bonus-item">
                                     <h5><span class="consecutive-bonus">连投奖励</span></h5>
                                     <div class="sub-content-item bonus-sub-item">
-                                        <p>投出点数<span class="dice-special">6</span>获额外1次投骰子机会。</p>
+                                        <p>摇到点数<span class="dice-special">6</span>获额外1次投骰子机会。</p>
                                     </div>
                                     <div class="sub-content-item bonus-sub-item">
                                         <p>单次回合连投3次<span class="dice-special">6</span>，该玩家所有棋子回基地，回合结束。</p>
@@ -930,14 +937,14 @@
                                                 class="stack-text">[叠子]</span>上，则该棋子与该位置的<span
                                                 class="stack-text">[叠子]</span>均返回各自基地。</p>
                                         <p class="beat-detail">• 若受<span
-                                                class="stack-text">[叠子]</span>阻拦回退后终点有敌方单颗棋子，则将其逐回基地。</p>
+                                                class="stack-text">[叠子]</span>阻拦回退后最终位置有敌方单颗棋子，则将其逐回基地。</p>
                                     </div>
                                 </div>
 
                                 <div class="mechanism-item finish-item">
                                     <h5><span class="finish-text">到达终点</span></h5>
                                     <div class="sub-content-item finish-sub-item">
-                                        <p>棋子移动后刚好停在终点格子视为到达终点，否则将回退多余点数；</p>
+                                        <p>棋子移动后刚好停在终点格子视为到达终点，否则将回退多余点数。</p>
                                     </div>
                                 </div>
                             </div>

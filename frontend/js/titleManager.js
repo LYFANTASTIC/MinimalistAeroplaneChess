@@ -10,7 +10,7 @@ class TitleManager {
         this.TITLES = {
             // 概率称号 (优先级 1)
             PROBABILITY: {
-                REVERSE_LUCKY: { id: 'reverse_lucky', name: '反向欧皇', desc: '连着三回合都投出 1 点' },
+                REVERSE_LUCKY: { id: 'reverse_lucky', name: '反向欧皇', desc: '连着三回合都摇到 1 点' },
                 UNLUCKY_START: { id: 'unlucky_takeoff', name: '非酋', desc: '连着三回合无法起飞' },
                 LUCKY_KING: { id: 'lucky_king', name: '欧皇', desc: '连投三次 6' },
                 INVISIBLE: { id: 'invisible', name: '不死传说', desc: '整局未被击败过' },
@@ -21,7 +21,7 @@ class TitleManager {
             UNIQUE: {
                 MARATHON: { id: 'marathon', name: '长跑冠军', desc: '移动格数全场最多' },
                 SPEED_LEGEND: { id: 'speed_legend', name: '最速传说', desc: '首个使棋子抵达终点' },
-                SIX_MASTER: { id: 'six_master', name: '六点狂魔', desc: '投出 6 的次数全场最多' },
+                SIX_MASTER: { id: 'six_master', name: '六点狂魔', desc: '摇到 6 的次数全场最多' },
                 KILLER: { id: 'killer', name: '收割者', desc: '击败对手次数最多' },
                 HOME_VISITOR: { id: 'home_visitor', name: '回家常客', desc: '被对手击败次数最多' },
                 CHESS_KING: { id: 'chess_king', name: '棋王', desc: '本局第一名' },

@@ -152,7 +152,10 @@ class AudioManager {
             audioClone.volume = volume !== null ? volume : this.volume;
             const playPromise = audioClone.play();
             if (playPromise !== undefined) {
-                playPromise.catch(error => console.warn(`播放音效 ${soundName} 失败:`, error));
+                playPromise.catch(error => {
+                    if (error.name === 'NotAllowedError') return;
+                    console.warn(`播放音效 ${soundName} 失败:`, error);
+                });
             }
         } catch (error) {
             console.warn(`播放音效 ${soundName} 出错:`, error);

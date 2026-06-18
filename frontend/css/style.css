@@ -5339,6 +5339,10 @@ use[href="#checkmark"] {
     border: 2px solid rgba(166, 216, 183, 0.6);
 }
 
+.move-item {
+    border: 2px solid rgba(120, 144, 212, 0.6);
+}
+
 .bonus-item {
     border: 2px solid rgba(101, 187, 158, 0.6);
 }
@@ -5378,6 +5382,11 @@ use[href="#checkmark"] {
 
 .launch-sub-item {
     background: rgba(166, 216, 183, 0.15);
+}
+
+/* 移动子内容容器 */
+.move-sub-item {
+    background: rgba(120, 144, 212, 0.15);
 }
 
 /* 飞棋子内容容器 */
@@ -5430,6 +5439,7 @@ use[href="#checkmark"] {
 
 /* 游戏规则面板中的特殊操作样式 - 移除边框，只保留颜色 */
 .rules-content .move-type-launch,
+.rules-content .move-type-move,
 .rules-content .move-type-jump,
 .rules-content .move-type-fly,
 .rules-content .stack-text,
@@ -5438,6 +5448,7 @@ use[href="#checkmark"] {
 }
 
 .rules-content .move-type-launch,
+.rules-content .move-type-move,
 .rules-content .move-type-jump,
 .rules-content .move-type-fly,
 .rules-content .stack-text,
@@ -5449,6 +5460,10 @@ use[href="#checkmark"] {
 
 .rules-content .move-type-launch {
     background: rgba(166, 216, 183, 0.4);
+}
+
+.rules-content .move-type-move {
+    background: rgba(120, 144, 212, 0.4);
 }
 
 .rules-content .move-type-jump {
@@ -5569,13 +5584,11 @@ use[href="#checkmark"] {
 }
 
 .room-code-digit-input:hover {
-    border-color: var(--border-soft);
     box-shadow: none;
 }
 
 /* 输入框有内容时的样式 */
 .room-code-digit-input.filled {
-    background: var(--bg-almost-none);
     border-color: var(--primary-color);
 }
 
