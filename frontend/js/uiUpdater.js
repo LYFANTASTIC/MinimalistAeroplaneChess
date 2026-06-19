@@ -100,6 +100,7 @@ class UIUpdater {
         // 先检查是否有震动效果和已有的重要样式，再清除样式类
         const hasShakeClass = diceDisplay.classList.contains('dice-shake');
         const hasPenaltyWarningClass = diceDisplay.classList.contains('dice-penalty-warning');
+        const hasRemoteDiceClass = diceDisplay.classList.contains('remote-dice');
 
         // 清除所有样式类，但保留基础类
         diceDisplay.className = 'dice-icon';
@@ -111,6 +112,11 @@ class UIUpdater {
 
         if (hasPenaltyWarningClass) {
             diceDisplay.classList.add('dice-penalty-warning');
+        }
+
+        // 保留遥控骰子特效（暂停/恢复时不会被擦除）
+        if (hasRemoteDiceClass) {
+            diceDisplay.classList.add('remote-dice');
         }
 
         if (diceValue > 0) {

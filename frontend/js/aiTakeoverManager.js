@@ -411,8 +411,6 @@ class AITakeoverManager {
 
         // 添加【Bot】后缀
         const newName = originalName + '【Bot】';
-        playerNameManager.setPlayerName(player, newName);
-
         // 更新UI显示
         this.updatePlayerNameDisplay(player, newName);
     }
@@ -423,8 +421,7 @@ class AITakeoverManager {
     restoreOriginalNames() {
         for (const [player, originalName] of Object.entries(this.originalNames)) {
             const playerNum = parseInt(player);
-            playerNameManager.setPlayerName(playerNum, originalName);
-            // 更新UI显示
+            // 仅更新DOM显示
             this.updatePlayerNameDisplay(playerNum, originalName);
         }
 

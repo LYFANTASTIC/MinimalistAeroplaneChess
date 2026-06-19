@@ -1234,11 +1234,10 @@ body {
     text-shadow: 0 1px 2px rgba(255, 255, 255, 0.05);
 }
 
-/* 遥控骰子特效 - 简化样式 */
+/* 遥控骰子特效*/
 .dice-icon.remote-dice {
-    color: rgba(45, 36, 31, 0.9) !important;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2) !important;
-    filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.25)) !important;
+    color: #5bd0d6 !important;
+    text-shadow: 0 2px 2px rgba(86, 86, 86, 0.5) !important;
     scale: 1.05;
 }
 
@@ -3532,7 +3531,7 @@ use[href="#checkmark"] {
 /* 规则模态框特殊样式 */
 .rules-modal-content {
     width: 90%;
-    max-width: 600px;
+    max-width: 500px;
     min-width: 300px;
     max-height: 90vh;
     background: linear-gradient(135deg, rgba(245, 245, 240, 0.95), rgba(250, 248, 245, 0.9));
@@ -5539,10 +5538,6 @@ use[href="#checkmark"] {
     z-index: 9999;
     align-items: center;
     justify-content: center;
-}
-
-.modal-body {
-    padding: 20px;
 }
 
 .room-code-input-section {

@@ -1661,6 +1661,14 @@ class MultiplayerGameManager {
             diceDisplay.textContent = DICE_SYMBOLS[data.diceValue - 1];
             // 添加遥控骰子红色发光特效（包括本地玩家）
             diceDisplay.classList.add('remote-dice');
+            // 同步更新游戏状态中的骰子值，防止暂停恢复后被updateUI重置
+            if (this.gameInstance && this.gameInstance.gameState) {
+                this.gameInstance.gameState.diceValue = data.diceValue;
+                this.gameInstance.gameState.isRemoteDice = true;
+            } else if (window.gameState) {
+                window.gameState.diceValue = data.diceValue;
+                window.gameState.isRemoteDice = true;
+            }
         }
     }
 
@@ -1889,6 +1897,11 @@ class MultiplayerGameManager {
                 if (playerNumber !== null) {
                     diceDisplay.classList.add('rolled', `player-${playerNumber}`);
                 }
+
+                // 遥控骰子保留特效
+                if (data.isRemoteDice) {
+                    diceDisplay.classList.add('remote-dice');
+                }
             }
 
             // 强制确保骰子显示正确的结果
@@ -1905,6 +1918,11 @@ class MultiplayerGameManager {
                     diceDisplay.classList.remove('dice-waiting', 'dice-flashing', 'not-rolled');
                     // 确保有正确的样式
                     diceDisplay.classList.add('rolled', `player-${playerNumber}`);
+                }
+
+                // 遥控骰子保留特效
+                if (data.isRemoteDice) {
+                    diceDisplay.classList.add('remote-dice');
                 }
             }
         }

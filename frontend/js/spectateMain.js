@@ -143,9 +143,9 @@ class FlyingChessGame {
         if (skillBtn) skillBtn.style.display = 'none';
         const chatBtn = document.getElementById('chatBtn');
         if (chatBtn) chatBtn.style.display = 'none';
-        // 设置所有按钮的disabled状态（保留游戏规则、音效开关、规则弹框关闭按钮可点击）
+        // 设置所有按钮的disabled状态（保留游戏规则、音效开关、结算弹框按钮可点击）
         document.querySelectorAll('button').forEach(btn => {
-            if (btn.id !== 'returnHome' && btn.id !== 'panelSwitchBtn' && btn.id !== 'showRules' && btn.id !== 'toggleAudio' && btn.id !== 'rules-close') {
+            if (btn.id !== 'returnHome' && btn.id !== 'panelSwitchBtn' && btn.id !== 'showRules' && btn.id !== 'toggleAudio' && btn.id !== 'rules-close' && btn.id !== 'settlement-close' && btn.id !== 'new-game-btn' && btn.id !== 'data-analysis-btn') {
                 btn.disabled = true;
             }
         });
