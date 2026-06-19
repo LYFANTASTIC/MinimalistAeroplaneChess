@@ -1364,6 +1364,12 @@ function handleMessage(ws, playerId, message) {
       case 'diceDisplay':
         handleDiceDisplay(ws, playerId, message);
         break;
+      case 'fullMoveStart':
+        handleFullMoveStart(ws, playerId, message);
+        break;
+      case 'finalMoveResult':
+        handleFinalMoveResult(ws, playerId, message);
+        break;
       case 'teleportIcon':
         handleTeleportIcon(ws, playerId, message);
         break;
@@ -2571,6 +2577,16 @@ function handleDiceRoll(ws, playerId, message) {
           timestamp: Date.now()
         });
 
+        // 同步更新服务器端的棋子状态，将受惩罚玩家的所有棋子送回基地
+        const penalizedPlayer = message.player;
+        if (gameSession.gameData.playerChess[penalizedPlayer]) {
+          for (let i = 0; i < gameSession.gameData.playerChess[penalizedPlayer].length; i++) {
+            gameSession.gameData.playerChess[penalizedPlayer][i].position = -1;
+            gameSession.gameData.playerChess[penalizedPlayer][i].finished = false;
+          }
+          console.log(`[threeSixesPenalty] 更新服务器棋子状态: 玩家${penalizedPlayer} 所有棋子已回基地`);
+        }
+
         // 延迟切换到下一个玩家
         setTimeout(() => {
           // 获取所有在线玩家
@@ -2659,6 +2675,68 @@ function handleDiceDisplay(ws, playerId, message) {
   });
 }
 
+// 处理整回合移动开始消息（意图同步）
+function handleFullMoveStart(ws, playerId, message) {
+  const target = getBroadcastTarget(playerId);
+  if (!target) throw new Error('玩家不在任何房间或游戏会话中');
+
+  target.broadcast({
+    type: 'fullMoveStart',
+    playerId,
+    player: message.player,
+    chessIndex: message.chessIndex,
+    diceValue: message.diceValue,
+    fromPosition: message.fromPosition,
+    timestamp: message.timestamp
+  });
+}
+
+// 处理整回合移动最终结果消息（兜底校验）
+function handleFinalMoveResult(ws, playerId, message) {
+  const target = getBroadcastTarget(playerId);
+  if (!target) throw new Error('玩家不在任何房间或游戏会话中');
+
+  // 如果是游戏会话，更新服务器端的棋子状态
+  if (target.gameData && target.gameData.playerChess) {
+    const player = message.player;
+    const chessIndex = message.chessIndex;
+    const finalPosition = message.finalPosition;
+    
+    // 更新移动的棋子位置
+    if (target.gameData.playerChess[player]?.[chessIndex]) {
+      target.gameData.playerChess[player][chessIndex].position = finalPosition;
+      if (finalPosition === 56) {
+        target.gameData.playerChess[player][chessIndex].finished = true;
+      } else if (finalPosition === -1) {
+        target.gameData.playerChess[player][chessIndex].finished = false;
+      }
+      console.log(`[finalMoveResult] 更新服务器棋子状态: 玩家${player}棋子${chessIndex} 位置=${finalPosition}`);
+    }
+
+    // 更新被 beat 的棋子位置
+    if (message.beatenChesses && Array.isArray(message.beatenChesses)) {
+      for (const bc of message.beatenChesses) {
+        if (target.gameData.playerChess[bc.player]?.[bc.chessIndex]) {
+          target.gameData.playerChess[bc.player][bc.chessIndex].position = -1;
+          target.gameData.playerChess[bc.player][bc.chessIndex].finished = false;
+          console.log(`[finalMoveResult] 更新服务器被beat棋子: 玩家${bc.player}棋子${bc.chessIndex} 回家`);
+        }
+      }
+    }
+  }
+
+  target.broadcast({
+    type: 'finalMoveResult',
+    playerId,
+    player: message.player,
+    chessIndex: message.chessIndex,
+    finalPosition: message.finalPosition,
+    beatenChesses: message.beatenChesses,
+    extraInfo: message.extraInfo,
+    timestamp: message.timestamp
+  });
+}
+
 // 处理传送门图标显示同步
 function handleTeleportIcon(ws, playerId, message) {
   const target = getBroadcastTarget(playerId);
@@ -2720,6 +2798,7 @@ function handleEnergyGainAnimation(ws, playerId, message) {
     type: 'energyGainAnimation',
     playerId,
     energyGain: message.energyGain,
+    player: message.player,
     timestamp: message.timestamp
   });
 }
@@ -3260,14 +3339,14 @@ function handleNicknameChange(ws, playerId, message) {
 
 // 棋子移动（游戏内）
 const handleChessMove = withGameSessionValidation((ws, playerId, message, gameSession) => {
-  const { player, chessIndex, position, timestamp } = message;
+  const { player, chessIndex, position, fromPosition, moveType, timestamp } = message;
   // 更新棋子状态
   if (gameSession.gameData.playerChess[player]?.[chessIndex]) {
     gameSession.gameData.playerChess[player][chessIndex].position = position;
     if (position === 56) {
       gameSession.gameData.playerChess[player][chessIndex].finished = true;
     }
-    console.log(`更新棋子状态: 玩家${player}棋子${chessIndex} 到${position}`);
+    console.log(`更新棋子状态: 玩家${player}棋子${chessIndex} 到${position}${moveType ? ` (${moveType})` : ''}`);
   }
 
   // 广播移动结果
@@ -3277,6 +3356,8 @@ const handleChessMove = withGameSessionValidation((ws, playerId, message, gameSe
     player,
     chessIndex,
     position,
+    fromPosition: fromPosition || undefined,
+    moveType: moveType || undefined,
     gameSessionId: gameSession.gameSessionId,
     timestamp
   });
@@ -3663,6 +3744,7 @@ function handleGameEnd(ws, playerId, message) {
     type: 'gameEnd',
     playerId,
     winnerPlayer: message.winnerPlayer,
+    titleStats: message.titleStats || undefined,
     gameStartTime: target && target.gameData ? target.gameData.gameStartTime : undefined,
     progressHistory: target && target.gameData ? target.gameData.progressHistory : undefined,
     currentRound: target && target.gameData ? target.gameData.currentRound : undefined,
@@ -3741,6 +3823,7 @@ function handleForceSettlement(ws, playerId, message) {
     type: 'forceSettlement',
     playerId,
     rankings: message.rankings,
+    titleStats: message.titleStats || undefined,
     gameStartTime: target && target.gameData ? target.gameData.gameStartTime : undefined,
     progressHistory: target && target.gameData ? target.gameData.progressHistory : undefined,
     currentRound: target && target.gameData ? target.gameData.currentRound : undefined,

@@ -29,6 +29,7 @@ class GameState {
         this.isLocalMultiplayer = false; // 是否为本地多人模式
         this.isOnlineMultiplayer = false; // 是否为在线多人模式
         this.isInChessAnimation = false; // 是否在棋子动画中（防止bringToFront破坏动画）
+        this.isThreeSixesPenaltyActive = false; // 三次6惩罚是否正在执行中
 
         // 棋子数量配置
         this.pieceCount = 4; // 默认每个玩家4个棋子
@@ -461,6 +462,13 @@ class GameState {
     // 切换到下一个玩家
     nextPlayer(uiUpdater = null, handleThinkingTimeoutWrapper = null, triggerBotOperationIfNeeded = null, stopProgressBar = true, onlineTurnChangeExtra = null) {
 
+        // 网络回放模式下不切玩家、不发同步消息，状态由收到的 playerTurnChange 消息同步
+        const isNetworkReplay = window.gameInstance && window.gameInstance.chessPiece && window.gameInstance.chessPiece._isNetworkReplayMode;
+        if (isNetworkReplay) {
+            console.log('[nextPlayer] 网络回放模式，跳过本地切玩家');
+            return;
+        }
+
         // 在多人模式下，需要先同步activePlayerManager的当前玩家状态
         if (this.isOnlineMultiplayer || this.isLocalMultiplayer) {
             // 确保activePlayerManager知道当前玩家是谁
@@ -503,6 +511,7 @@ class GameState {
         this.canReroll = false;
         this.isRemoteDice = false;
         this.isPolyhedralDiceActive = false;
+        this.isThreeSixesPenaltyActive = false; // 确保清除三次6惩罚标志
 
         // 在多人游戏模式下同步玩家轮次变化
         if (this.isOnlineMultiplayer && window.gameInstance && window.gameInstance.multiplayerGameManager) {
@@ -1242,6 +1251,15 @@ class GameState {
         if (!inProgress && this.pendingSafePause) {
             this.executePendingSafePause();
         }
+    }
+
+    // 三次6惩罚状态管理
+    getThreeSixesPenaltyActive() {
+        return this.isThreeSixesPenaltyActive;
+    }
+
+    setThreeSixesPenaltyActive(active) {
+        this.isThreeSixesPenaltyActive = active;
     }
 
     // 棋子移动状态管理

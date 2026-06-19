@@ -1983,6 +1983,10 @@ use[href="#checkmark"] {
     letter-spacing: 0.5px;
 }
 
+.game-room-code-display-column {
+    display: none;
+}
+
 .game-room-label {
     font-weight: normal;
     margin-right: 5px;
@@ -2017,6 +2021,7 @@ use[href="#checkmark"] {
     height: 250px;
     overflow: hidden;
     position: relative;
+    max-width: 250px;
     min-width: 250px;
     box-shadow: none;
     flex-shrink: 0;
@@ -2036,6 +2041,7 @@ use[href="#checkmark"] {
     flex: 1;
     min-height: 0;
     overflow-y: auto;
+    overflow-x: hidden;
     padding: 10px 15px 15px 15px;
     box-sizing: border-box;
 }
@@ -5834,11 +5840,15 @@ use[href="#checkmark"] {
     z-index: 10000;
     animation: fadeInOutCenter 3s ease forwards;
     backdrop-filter: none;
-    pointer-events: none;
+    pointer-events: none !important; /* 强制不拦截任何鼠标事件 */
     width: max-content;
     max-width: 80%;
     word-break: break-word;
     text-align: center;
+    /* 额外的安全措施 */
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none;
 }
 
 /* 平板和手机端通用样式 */
@@ -5946,6 +5956,7 @@ use[href="#checkmark"] {
 
     .game-info-panel {
         max-height: 250px;
+        max-width: none;
     }
 
     .progress-panel {
@@ -6018,6 +6029,56 @@ use[href="#checkmark"] {
         width: 32px;
         height: 32px;
         padding: 3px;
+    }
+}
+
+/* 中屏优化：三个板块水平排列、等高，内部内容均匀分布 */
+@media (min-width: 695px) and (max-width: 1260px) {
+    .game-control-content {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 12px;
+        align-items: stretch;
+        width: 100%;
+    }
+    /* 第2列（完成进度）：内部进度条均匀分布 */
+    .game-control-content > .game-panel-section:nth-child(2) {
+        display: flex;
+        flex-direction: column;
+    }
+    .game-control-content > .game-panel-section:nth-child(2) .progress-panel {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+    }
+    .game-control-content > .game-panel-section:nth-child(2) .panel-body-container {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+    }
+    .game-control-content > .game-panel-section:nth-child(2) .progress-content {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-evenly;
+    }
+    /* 第3列（操作按钮）：内部按钮均匀分布 */
+    .game-control-content > .game-panel-section:nth-child(3) {
+        display: flex;
+        flex-direction: column;
+        justify-content: space-evenly;
+    }
+    .game-control-content > .game-panel-section:nth-child(3) .game-room-code-display-column {
+        display: block;
+        margin: 0 10% 6px 10%;
+        padding: 8px 12px;
+        font-size: 16px;
+    }
+    .control-title .game-room-code-display {
+        display: none !important;
+    }
+    .game-control-content > .debug-section {
+        display: none;
     }
 }
 
@@ -6238,7 +6299,9 @@ use[href="#checkmark"] {
 
     .game-info-panel {
         height: 320px;
+        width: auto;
         min-width: auto;
+        max-width: none;
         margin-bottom: 15px;
     }
 

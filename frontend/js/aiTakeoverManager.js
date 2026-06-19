@@ -74,6 +74,23 @@ class AITakeoverManager {
             this.updateToggleButton();
 
         }
+        // 初始化关闭AI托管按钮
+        this.cancelAiTakeoverBtn = document.getElementById('cancelAiTakeoverBtn');
+        this.skillBtn = document.getElementById('skillBtn');
+        if (this.cancelAiTakeoverBtn) {
+            this.cancelAiTakeoverBtn.addEventListener('click', () => {
+                this.toggleTakeover();
+            });
+        }
+        // 从 gameState 恢复 AI 托管状态
+        this.isActive = gameState.isAITakeover;
+        // 初始化时确保按钮显示正确
+        this.updateControlButtons();
+        this.updateToggleButton();
+        // 如果之前是托管状态，需要显示遮罩等
+        if (this.isActive) {
+            this.showOverlay();
+        }
     }
 
     /**
@@ -94,9 +111,8 @@ class AITakeoverManager {
         // 存储并修改所有人类玩家的昵称
         this.modifyHumanPlayerNames();
 
-        if (skillManager && typeof skillManager.disableForAITakeover === 'function') {
-            skillManager.disableForAITakeover();
-        }
+        // 更新控制按钮：隐藏技能按钮，显示取消托管按钮
+        this.updateControlButtons();
 
         // 更新按钮文本
         this.updateToggleButton();
@@ -159,8 +175,12 @@ class AITakeoverManager {
         // 恢复所有玩家的原始昵称
         this.restoreOriginalNames();
 
-        if (skillManager && typeof skillManager.enableAfterAITakeover === 'function') {
-            skillManager.enableAfterAITakeover();
+        // 更新控制按钮：显示技能按钮，隐藏取消托管按钮
+        this.updateControlButtons();
+
+        // 让skillManager重新显示技能按钮
+        if (skillManager && skillManager.updateButtonVisibility) {
+            skillManager.updateButtonVisibility();
         }
 
         // 如果当前正是自己的回合，强制恢复交互逻辑
@@ -195,6 +215,24 @@ class AITakeoverManager {
      * 处理来自服务器的托管状态变更（针对本地玩家自身）
      * 仅更新本地UI和状态，不触发向服务器的同步，避免死循环
      */
+    /**
+     * 更新右侧控制按钮的显示/隐藏状态
+     */
+    updateControlButtons() {
+        if (this.skillBtn && this.cancelAiTakeoverBtn) {
+            if (this.isActive) {
+                // AI托管中：显示取消托管按钮，隐藏技能按钮
+                this.skillBtn.style.display = 'none';
+                this.cancelAiTakeoverBtn.style.display = 'block';
+            } else {
+                // 非AI托管：隐藏取消托管按钮
+                this.cancelAiTakeoverBtn.style.display = 'none';
+                // 移除手动设置的display属性，让skillManager完全接管
+                this.skillBtn.style.display = '';
+            }
+        }
+    }
+
     applyRemoteTakeoverState(isActive) {
         if (this.isActive === isActive) {
             return;
@@ -212,16 +250,14 @@ class AITakeoverManager {
                 window.botController.setEnabled(true);
             }
             
-            if (skillManager && typeof skillManager.disableForAITakeover === 'function') {
-                skillManager.disableForAITakeover();
-            }
+            // 更新控制按钮
+            this.updateControlButtons();
         } else {
             updatePageTitle();
             this.hideOverlay();
             
-            if (skillManager && typeof skillManager.enableAfterAITakeover === 'function') {
-                skillManager.enableAfterAITakeover();
-            }
+            // 更新控制按钮
+            this.updateControlButtons();
 
             // 如果关闭的是本地玩家自己的托管，强制恢复交互逻辑
             if (window.multiplayerGameManager && window.gameState) {
@@ -232,7 +268,9 @@ class AITakeoverManager {
                 if (currentPlayerId === localPlayerId) {
                     console.log('[AI托管] 检测到在自己回合关闭托管，强制恢复交互');
                     // 1. 恢复交互属性
-                    this.enableUserInteraction();
+                    if (this.enableUserInteraction) {
+                        this.enableUserInteraction();
+                    }
                     // 2. 强制触发UI更新
                     if (window.uiUpdater) {
                         window.uiUpdater.updateUI();

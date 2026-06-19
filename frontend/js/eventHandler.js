@@ -1012,9 +1012,10 @@ class EventHandler {
                 }
                 
 
-                // 解除正在处理锁定（如果卡住了）
+                // 如果bot正在处理操作，不再重复触发
                 if (botController.isProcessing) {
-                    botController.isProcessing = false;
+                    console.log(`[事件处理] 玩家${currentPlayer}是AI/托管，但bot正在处理中，跳过`);
+                    return;
                 }
 
                 console.log(`[事件处理] 玩家${currentPlayer}需要AI操作，延迟触发botController`);

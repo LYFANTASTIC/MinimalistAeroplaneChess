@@ -112,6 +112,10 @@ class Dice {
 
             const diceDisplay = document.getElementById('diceDisplay');
 
+            diceDisplay.classList.remove('dice-flashing', 'dice-glowing', 'not-rolled', 'rolled');
+            diceDisplay.className = 'dice-icon';
+            void diceDisplay.offsetWidth; // 强制重排
+
             // 添加闪烁动画类
             diceDisplay.classList.add('dice-flashing');
 
@@ -374,6 +378,9 @@ class Dice {
      * 处理连续三次6的惩罚
      */
     async handleThreeSixesPenalty() {
+        // 立即设置三次6惩罚标志，防止AI继续操作
+        this.gameState.setThreeSixesPenaltyActive(true);
+
         // 惩罚：所有棋子返回起点
         const pieceCount = this.gameState.pieceCount; // 获取当前棋子个数
         for (let i = 0; i < pieceCount; i++) {
@@ -412,6 +419,9 @@ class Dice {
         if (this.eventHandler && this.eventHandler.handlePendingPause) {
             this.eventHandler.handlePendingPause();
         }
+
+        // 清除三次6惩罚标志
+        this.gameState.setThreeSixesPenaltyActive(false);
     }
 
     /**

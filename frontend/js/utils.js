@@ -167,19 +167,24 @@ export async function beatChessAtPosition(absolutePosition, currentPlayer, gameS
     if (targetChess) {
         console.log(`[Beat检测] 玩家${currentPlayer}打败玩家${targetChess.player}的棋子${targetChess.chessIndex}`);
 
+        // 检查是否在网络回放模式
+        const isReplayMode = window.gameInstance && window.gameInstance.chessPiece && window.gameInstance.chessPiece._isNetworkReplayMode;
+
         // 只有在executeStateUpdate为true时才执行状态更新和动画
         if (executeStateUpdate) {
-            // 添加beat信息到游戏信息面板
-            if (showBeatInfo) {
+            // 添加beat信息到游戏信息面板（非回放模式）
+            if (showBeatInfo && !isReplayMode) {
                 gameInfo.addChessBeat(currentPlayer, targetChess.player, targetChess.chessIndex, false, isRemoteDiceMove);
             }
 
-            // 增加击败次数统计
-            gameState.incrementDefeatCount(currentPlayer, targetChess.player);
+            // 增加击败次数统计（非回放模式）
+            if (!isReplayMode) {
+                gameState.incrementDefeatCount(currentPlayer, targetChess.player);
+            }
 
-            // 计算并增加积分（如果启用道具模式）
+            // 计算并增加积分（如果启用道具模式，且非回放模式）
             // 遥控/道具骰子击败不获得积分，以免过强
-            if (!isRemoteDiceMove) {
+            if (!isRemoteDiceMove && !isReplayMode) {
                 // 需要在棋子重置之前计算完成度损失
                 const targetChessObj = gameState.getPlayerChess()[targetChess.player][targetChess.chessIndex];
                 const progressBeforeBeat = calculateChessProgress(targetChessObj, targetChess.player);

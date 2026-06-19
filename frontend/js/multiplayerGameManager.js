@@ -80,6 +80,22 @@ class MultiplayerGameManager {
                 this._mergePlayerIntoMap(p);
             }
         }
+
+        // 更新 activePlayerManager
+        this._updateActivePlayers();
+    }
+
+    _updateActivePlayers() {
+        const activePlayers = [];
+        for (const [, player] of this.players) {
+            if (player.color) {
+                activePlayers.push(player.color);
+            }
+        }
+        if (activePlayers.length > 0) {
+            activePlayers.sort((a, b) => a - b);
+            activePlayerManager.setActivePlayers(activePlayers);
+        }
     }
 
     _safeUpdateUI() {
@@ -204,6 +220,9 @@ class MultiplayerGameManager {
                 }
             }
 
+            // 更新 activePlayers
+            this._updateActivePlayers();
+
             // 等待游戏完全初始化后再设置全局变量引用和连接服务器
             await this.waitForGameInitialization();
 
@@ -249,6 +268,9 @@ class MultiplayerGameManager {
             }
         }
 
+        // 更新 activePlayers
+        this._updateActivePlayers();
+
         // 建立WebSocket连接
         await this.connectToServer(this.serverUrl);
 
@@ -266,10 +288,22 @@ class MultiplayerGameManager {
         const pieceCount = window.gameState.pieceCount || 4;
         let totalBoundElements = 0;
 
-        for (let player = 1; player <= 4; player++) {
-            if (!window.gameState.playerChess[player]) continue;
+        // 获取激活玩家列表
+        const activePlayers = activePlayerManager.getActivePlayers();
 
+        for (let player = 1; player <= 4; player++) {
+            const isActive = activePlayers.includes(player);
             const chessElements = document.querySelectorAll(`#board-svg use[href="#chess"].player-${player}`);
+
+            if (!isActive) {
+                // 不参与的玩家：隐藏所有棋子
+                chessElements.forEach(element => {
+                    element.style.display = 'none';
+                });
+                continue;
+            }
+
+            if (!window.gameState.playerChess[player]) continue;
 
             // 有效棋子绑定：已有引用的保留，没有的按DOM索引匹配
             for (let chessIndex = 0; chessIndex < pieceCount; chessIndex++) {
@@ -590,6 +624,10 @@ class MultiplayerGameManager {
      * 发送消息
      */
     sendMessage(type, data = {}) {
+        if (this.isSpectator && !['spectate_room', 'rejoinRoom', 'audioLoaded'].includes(type)) {
+            console.warn('[sendMessage] 观战模式，跳过消息发送:', type);
+            return;
+        }
         if (this.isConnected && this.wsClient) {
             const message = {
                 type,
@@ -715,6 +753,12 @@ class MultiplayerGameManager {
                 break;
             case 'diceDisplay':
                 this.handleDiceDisplay(data);
+                break;
+            case 'fullMoveStart':
+                this.handleFullMoveStart(data);
+                break;
+            case 'finalMoveResult':
+                this.handleFinalMoveResult(data);
                 break;
             case 'teleportIcon':
                 this.handleTeleportIcon(data);
@@ -965,6 +1009,7 @@ class MultiplayerGameManager {
                             }
                             aiTakeoverManager.showOverlay();
                             aiTakeoverManager.updateToggleButton();
+                            aiTakeoverManager.updateControlButtons();
                             // 恢复昵称标记（如果需要）
                             aiTakeoverManager.modifyHumanPlayerNames();
                             console.log('本地AI托管状态已恢复');
@@ -1037,6 +1082,9 @@ class MultiplayerGameManager {
             if (activePlayers.length === 0) {
                 activePlayers = activePlayerManager.getActivePlayers() || [1];
             }
+            
+            // 设置激活玩家并更新可见性
+            activePlayerManager.setActivePlayers(activePlayers);
 
             // 检查本地currentPlayer是否在激活玩家列表中
             if (!localCurrentPlayer || !activePlayers.includes(localCurrentPlayer)) {
@@ -1183,7 +1231,6 @@ class MultiplayerGameManager {
                             // 恢复棋子位置：已完成的棋子在前端应该保持位置-1
                             if (chessData.finished) {
                                 currentChessStates[playerNum][chessIdx].position = -1;
-                                console.log(`恢复已完成棋子: 玩家${playerNum}棋子${chessIdx} 位置设为-1`);
                             } else {
                                 currentChessStates[playerNum][chessIdx].position = chessData.position;
                             }
@@ -1282,7 +1329,6 @@ class MultiplayerGameManager {
                     const chess = gameState.playerChess[player][chessIdx];
 
                     if (!chess || !chess.element) {
-                        console.log(`跳过玩家${player}棋子${chessIdx}: 元素不存在`);
                         continue;
                     }
 
@@ -1318,21 +1364,10 @@ class MultiplayerGameManager {
 
             // 如果是selecting阶段，确保高亮可移动的棋子
             if (gameState.getGamePhase() === 'selecting') {
-                console.log('恢复selecting阶段，高亮可移动棋子');
                 uiUpdater.updateChessGlow();
                 uiUpdater.highlightMovableChess();
             }
         }
-
-        // 恢复完成后输出当前状态
-        const finalChessStates = gameState.getAllChessStates ? gameState.getAllChessStates() : null;
-        console.log('游戏状态恢复完成！当前棋子状态:', finalChessStates);
-        console.log('游戏状态汇总:', {
-            currentPlayer: gameState.getCurrentPlayer(),
-            gamePhase: gameState.getGamePhase(),
-            diceValue: gameState.getDiceValue(),
-            winner: gameState.getWinner()
-        });
 
         // 如果游戏处于暂停状态，不应启动重连进度条
         if (gameState.getIsPaused()) {
@@ -1644,9 +1679,10 @@ class MultiplayerGameManager {
     /**
      * 同步积分数值动画
      */
-    syncEnergyGainAnimation(energyGain) {
+    syncEnergyGainAnimation(energyGain, player) {
         this.sendMessage('energyGainAnimation', {
             energyGain,
+            player,
             timestamp: Date.now()
         });
     }
@@ -1725,7 +1761,7 @@ class MultiplayerGameManager {
         }
 
         if (this.gameInstance && this.gameInstance.skillManager) {
-            const playerNumber = this.getPlayerNumberByPlayerId(data.playerId);
+            const playerNumber = data.playerNumber || this.getPlayerNumberByPlayerId(data.playerId);
             this.gameInstance.skillManager.showMysteryBoxIcon(playerNumber);
         }
     }
@@ -1746,9 +1782,7 @@ class MultiplayerGameManager {
      */
     handleEnergyGainAnimation(data) {
         if (data.playerId === this.playerId) return; // 忽略自己的消息
-
-        // 获取玩家编号
-        const playerNumber = this.getPlayerNumberByPlayerId(data.playerId);
+        const playerNumber = data.player !== undefined ? data.player : this.getPlayerNumberByPlayerId(data.playerId);
 
         if (this.gameInstance && this.gameInstance.skillManager) {
             this.gameInstance.skillManager.showEnergyGainAnimation(data.energyGain, playerNumber);
@@ -1770,6 +1804,14 @@ class MultiplayerGameManager {
             if (window.aiTakeoverManager && typeof window.aiTakeoverManager.updateToggleButton === 'function') {
                 window.aiTakeoverManager.updateToggleButton();
             }
+        }
+
+        // 防插队保护：验证掷骰子玩家是否为当前玩家
+        const diceRollerPlayer = data.player !== undefined ? data.player : this.getPlayerNumberByPlayerId(data.playerId);
+        const currentPlayer = this.gameInstance?.gameState?.getCurrentPlayer?.();
+        if (currentPlayer !== undefined && currentPlayer !== null && diceRollerPlayer !== currentPlayer && this.gameInstance?.gameState?.getGameOfficiallyStarted()) {
+            console.warn(`[防插队] 忽略玩家${diceRollerPlayer}的掷骰消息: 当前玩家为${currentPlayer}`);
+            return;
         }
 
         const diceDisplay = document.getElementById('diceDisplay');
@@ -1992,6 +2034,37 @@ class MultiplayerGameManager {
     }
 
     /**
+     * 同步整回合移动的开始（意图同步）：告诉其他玩家"我选了棋子X，骰子点数Y，从位置Z开始"
+     */
+    syncFullMoveStart(player, chessIndex, diceValue, fromPosition) {
+        if (this.wsClient && this.wsClient.readyState === WebSocket.OPEN) {
+            this.sendMessage('fullMoveStart', {
+                player: player,
+                chessIndex: chessIndex,
+                diceValue: diceValue,
+                fromPosition: fromPosition,
+                timestamp: Date.now()
+            });
+        }
+    }
+
+    /**
+     * 同步整回合移动的最终结果（兜底校验）：告诉其他玩家最终位置和被beat的棋子
+     */
+    syncFinalMoveResult(player, chessIndex, finalPosition, beatenChesses, extraInfo) {
+        if (this.wsClient && this.wsClient.readyState === WebSocket.OPEN) {
+            this.sendMessage('finalMoveResult', {
+                player: player,
+                chessIndex: chessIndex,
+                finalPosition: finalPosition,
+                beatenChesses: beatenChesses || [],
+                extraInfo: extraInfo || {},
+                timestamp: Date.now()
+            });
+        }
+    }
+
+    /**
      * 处理棋子移动同步
      */
     handleChessMove(data) {
@@ -2017,6 +2090,15 @@ class MultiplayerGameManager {
         if (this.gameInstance && this.gameInstance.gameState) {
             const chess = this.gameInstance.gameState.playerChess[data.player]?.[data.chessIndex];
             const previousPosition = chess?.position;
+
+            // 防后退保护：如果棋子已在更高位置，忽略过时的 `chessMove` 消息
+            // （但传送门可以合法后退，不拦截）
+            if (data.moveType !== 'teleport' &&
+                previousPosition !== undefined && previousPosition >= 0 && previousPosition < 56 && 
+                data.position >= 0 && data.position < 56 && data.position < previousPosition) {
+                console.log(`[handleChessMove] 忽略后退移动: 玩家${data.player}棋子${data.chessIndex} ${previousPosition}→${data.position}`);
+                return;
+            }
 
             // 更新位置
             this.gameInstance.gameState.updateChessPosition(data.player, data.chessIndex, data.position);
@@ -2075,7 +2157,13 @@ class MultiplayerGameManager {
                 return;
             }
 
-            // 如果是传送门移动，播放传送动画
+            // 无论什么移动类型，先确保视觉位置正确更新（传送门也立即更新，再叠加淡入淡出）
+            if (this.gameInstance.chessPiece && this.gameInstance.chessPiece.animation) {
+                this.gameInstance.chessPiece.animation.bringToFront(data.player, data.chessIndex);
+                this.gameInstance.chessPiece.animation.updateChessPosition(data.player, data.chessIndex);
+            }
+
+            // 如果是传送门移动，额外叠加淡入淡出动画
             if (data.moveType === 'teleport' && chess && chess.element) {
                 // 播放传送音效
                 if (window.audioManager) {
@@ -2083,34 +2171,114 @@ class MultiplayerGameManager {
                 }
 
                 const chessElement = chess.element;
-                // 淡出效果
+                // 淡出后淡入：先设置过渡，强制重排确保注册，再改 opacity
                 chessElement.style.transition = 'opacity 0.2s ease-out';
+                void chessElement.offsetWidth; // 强制重排，让浏览器记录起始 opacity
                 chessElement.style.opacity = '0';
 
-                // 等待淡出完成后更新位置
                 setTimeout(() => {
-                    // 更新视觉位置前移到最顶层
-                    if (this.gameInstance.chessPiece && this.gameInstance.chessPiece.animation) {
-                        this.gameInstance.chessPiece.animation.bringToFront(data.player, data.chessIndex);
-                        this.gameInstance.chessPiece.animation.updateChessPosition(data.player, data.chessIndex);
-                    }
-
-                    // 淡入效果
+                    chessElement.style.opacity = '1';
                     setTimeout(() => {
-                        chessElement.style.opacity = '1';
-
-                        // 动画完成后清除transition
-                        setTimeout(() => {
-                            chessElement.style.transition = '';
-                        }, 200);
-                    }, 50);
+                        chessElement.style.transition = '';
+                    }, 200);
                 }, 200);
+            }
+        }
+    }
+
+    /**
+     * 处理整回合移动开始消息（其他玩家的意图同步）：本地重算并播放动画
+     */
+    async handleFullMoveStart(data) {
+        if (data.playerId === this.playerId) return;
+
+        console.log(`[FullMoveStart] 玩家${data.player} 棋子${data.chessIndex} 骰子${data.diceValue} 起始位置${data.fromPosition}`);
+
+        if (this.gameInstance?.chessPiece) {
+            // 防重复/过时保护：如果棋子已经超过起始位置（且不是回家），说明已被后续消息更新，跳过回放
+            const chess = this.gameInstance.chessPiece.gameState?.playerChess?.[data.player]?.[data.chessIndex];
+            if (chess) {
+                if (data.fromPosition >= 0 && chess.position > data.fromPosition) {
+                    console.log(`[FullMoveStart] 跳过过期回放: 棋子已在位置${chess.position} > 消息起始${data.fromPosition}`);
+                    return;
+                }
+                // 如果棋子已在终点，跳过
+                if (chess.finished || chess.position === 56) {
+                    console.log(`[FullMoveStart] 跳过回放: 棋子已完成`);
+                    return;
+                }
+            }
+
+            // 简化：直接调用 animateChessMovement，不修改其他状态
+            this.gameInstance.chessPiece._isNetworkReplayMode = true;
+            
+            // 如果是从家出发，先移到0
+            if (data.fromPosition === -1) {
+                const chess = this.gameInstance.chessPiece.gameState.playerChess[data.player][data.chessIndex];
+                chess.position = 0;
+                chess.lastLandPos = this.gameInstance.chessPiece.generateUniqueLastLandPos(0);
+                this.gameInstance.chessPiece.animation.bringToFront(data.player, data.chessIndex);
+                this.gameInstance.chessPiece.animation.updateChessPosition(data.player, data.chessIndex);
+                audioManager.playFlySound();
+                this.gameInstance.chessPiece.gameState.incrementTotalDistance(data.player, 1);
+                
+                // 检查特殊位置
+                if (this.gameInstance.chessPiece.utils.isJumpPoint(0)) {
+                    const nextJumpPoint = this.gameInstance.chessPiece.utils.getNextJumpPoint(0);
+                    if (nextJumpPoint) {
+                        await this.gameInstance.chessPiece.animation.animateJump(data.player, data.chessIndex, nextJumpPoint);
+                    }
+                }
             } else {
-                // 普通移动，直接更新视觉位置（只对普通位置0-55）
-                if (this.gameInstance.chessPiece && this.gameInstance.chessPiece.animation) {
-                    // 远程移动前先将棋子移到最顶层
-                    this.gameInstance.chessPiece.animation.bringToFront(data.player, data.chessIndex);
-                    this.gameInstance.chessPiece.animation.updateChessPosition(data.player, data.chessIndex);
+                // 正常移动
+                await this.gameInstance.chessPiece.animateChessMovement(data.player, data.chessIndex, data.diceValue);
+            }
+            
+            this.gameInstance.chessPiece._isNetworkReplayMode = false;
+        }
+    }
+
+    /**
+     * 处理整回合移动最终结果（兜底校验）：用权威状态覆盖本地状态
+     */
+    handleFinalMoveResult(data) {
+        if (data.playerId === this.playerId) return;
+
+        console.log(`[FinalMoveResult] 玩家${data.player} 棋子${data.chessIndex} 最终位置${data.finalPosition}`);
+
+        if (!this.gameInstance?.chessPiece) return;
+        // 如果正在回放模式，延迟处理，确保回放完成
+        if (this.gameInstance.chessPiece._isNetworkReplayMode) {
+            console.log('[FinalMoveResult] 正在回放中，延迟100ms后处理');
+            setTimeout(() => {
+                this.handleFinalMoveResult(data);
+            }, 100);
+            return;
+        }
+
+        // 强制更新棋子位置
+        const chess = this.gameInstance.chessPiece.gameState?.playerChess?.[data.player]?.[data.chessIndex];
+        if (chess && chess.position !== data.finalPosition) {
+            console.log(`[FinalMoveResult] 修正棋子位置: 本地=${chess.position} → 同步=${data.finalPosition}`);
+            chess.position = data.finalPosition;
+            if (this.gameInstance.chessPiece.animation) {
+                this.gameInstance.chessPiece.animation.updateChessPosition(data.player, data.chessIndex);
+            }
+        }
+
+        // 强制修正被 beat 的棋子（只修正状态，不触发动画/音效）
+        // fullMoveStart 的回放动画已触发过 beat 动画，这里只做兜底状态修正
+        if (data.beatenChesses && data.beatenChesses.length > 0) {
+            for (const bc of data.beatenChesses) {
+                const targetChess = this.gameInstance.chessPiece.gameState?.playerChess?.[bc.player]?.[bc.chessIndex];
+                if (targetChess && targetChess.position !== -1) {
+                    console.log(`[FinalMoveResult] 修正被beat棋子: 玩家${bc.player}棋子${bc.chessIndex} 回家`);
+                    targetChess.position = -1;
+                    targetChess.finished = false;
+                    if (this.gameInstance.chessPiece.animation) {
+                        // 使用静默还原，不触发 beat 动画/音效
+                        this.gameInstance.chessPiece.animation.restoreChessToStart(bc.player, bc.chessIndex);
+                    }
                 }
             }
         }
@@ -2442,6 +2610,7 @@ class MultiplayerGameManager {
                 this.gameInstance.gameState.setSelectedChess(null);
                 this.gameInstance.gameState.setConsecutiveSixes(0);
                 this.gameInstance.gameState.setCanReroll(false);
+                this.gameInstance.gameState.setThreeSixesPenaltyActive(false); // 确保清除三次6惩罚标志
 
                 // 同步activePlayerManager的当前玩家状态
                 activePlayerManager.setCurrentActivePlayer(data.newPlayer);
@@ -2709,18 +2878,74 @@ class MultiplayerGameManager {
      * 同步游戏结束和结算
      */
     syncGameEnd(winnerPlayer) {
+        // 收集称号相关统计数据，发送到服务器供所有客户端共享（确保所有玩家看到同一套称号）
+        const titleStats = this._collectTitleStats();
         this.sendMessage('gameEnd', {
             winnerPlayer: winnerPlayer,
+            titleStats: titleStats,
             timestamp: Date.now()
         });
+    }
+
+    /**
+     * 收集称号计算需要的所有统计数据的快照
+     * 用于 gameEnd / forceSettlement 时同步给所有客户端，确保称号计算结果一致
+     */
+    _collectTitleStats() {
+        if (!this.gameInstance?.gameState) return null;
+        const gs = this.gameInstance.gameState;
+        
+        return {
+            // titleStats 中的对象数据
+            consecutiveOnes: { ...gs.titleStats.consecutiveOnes },
+            consecutiveNoTakeoff: { ...gs.titleStats.consecutiveNoTakeoff },
+            maxConsecutiveSixes: { ...gs.titleStats.maxConsecutiveSixes },
+            firstFinishedPlayer: gs.titleStats.firstFinishedPlayer,
+            bounceSteps: { ...gs.titleStats.bounceSteps },
+            // 总前进距离
+            totalDistance: { ...gs.totalDistance },
+            // 骰子统计
+            diceStatistics: gs.diceStatistics ? {
+                1: { ...gs.diceStatistics[1] },
+                2: { ...gs.diceStatistics[2] },
+                3: { ...gs.diceStatistics[3] },
+                4: { ...gs.diceStatistics[4] }
+            } : undefined,
+            // 击败统计
+            defeatCounts: gs.defeatCounts ? {
+                1: { ...gs.defeatCounts[1] },
+                2: { ...gs.defeatCounts[2] },
+                3: { ...gs.defeatCounts[3] },
+                4: { ...gs.defeatCounts[4] }
+            } : undefined
+        };
+    }
+
+    /**
+     * 将服务器广播的称号统计数据应用到本地 gameState
+     */
+    _applyTitleStats(titleStats) {
+        if (!titleStats || !this.gameInstance?.gameState) return;
+        const gs = this.gameInstance.gameState;
+        
+        if (titleStats.consecutiveOnes) gs.titleStats.consecutiveOnes = titleStats.consecutiveOnes;
+        if (titleStats.consecutiveNoTakeoff) gs.titleStats.consecutiveNoTakeoff = titleStats.consecutiveNoTakeoff;
+        if (titleStats.maxConsecutiveSixes) gs.titleStats.maxConsecutiveSixes = titleStats.maxConsecutiveSixes;
+        if (titleStats.firstFinishedPlayer !== undefined) gs.titleStats.firstFinishedPlayer = titleStats.firstFinishedPlayer;
+        if (titleStats.bounceSteps) gs.titleStats.bounceSteps = titleStats.bounceSteps;
+        if (titleStats.totalDistance) gs.totalDistance = titleStats.totalDistance;
+        if (titleStats.diceStatistics) gs.diceStatistics = titleStats.diceStatistics;
+        if (titleStats.defeatCounts) gs.defeatCounts = titleStats.defeatCounts;
     }
 
     /**
      * 同步强制结算
      */
     syncForceSettlement(rankings) {
+        const titleStats = this._collectTitleStats();
         this.sendMessage('forceSettlement', {
             rankings: rankings,
+            titleStats: titleStats,
             timestamp: Date.now()
         });
     }
@@ -2819,9 +3044,32 @@ class MultiplayerGameManager {
     handleMoveChessToStart(data) {
         if (data.playerId === this.playerId && !this.isSpectator) return; // 忽略自己的消息
 
+        // 如果正在回放模式，延迟重试，等待回放完成
+        if (this.gameInstance?.chessPiece?._isNetworkReplayMode) {
+            console.log('[handleMoveChessToStart] 正在回放中，延迟100ms后处理');
+            setTimeout(() => {
+                this.handleMoveChessToStart(data);
+            }, 100);
+            return;
+        }
+
+        const chess = this.gameInstance?.gameState?.playerChess?.[data.player]?.[data.chessIndex];
+
+        // 如果棋子已经被回放动画送回家了（position === -1），
+        // 说明击败动画和音效已经由回放路径处理过了。
+        // 这里只做静默视觉修正，避免重复触发 playBeatSound() 导致两次击败音效/动画。
+        if (chess && chess.position === -1) {
+            console.log(`[handleMoveChessToStart] 棋子已在起点，静默修正: 玩家${data.player}棋子${data.chessIndex}`);
+            if (this.gameInstance?.animation) {
+                this.gameInstance.animation.restoreChessToStart(data.player, data.chessIndex);
+            }
+            return;
+        }
+
         console.log(`[同步] 棋子回归起点: 玩家${data.player}的棋子${data.chessIndex}，原因：${data.reason}`);
 
         if (data.reason === 'beat') {
+            // 在棋子被移回家之前缓存其当前位置，用于能量粒子动画的起点
             this.cacheDefeatedChessPosition(data.player, data.chessIndex);
         }
 
@@ -3030,6 +3278,11 @@ class MultiplayerGameManager {
     async handleThreeSixesPenalty(data) {
         console.log(`处理三次6惩罚同步: 玩家${data.player}连续掷出3次6，所有棋子返回起点`);
 
+        // 立即设置三次6惩罚标志，防止AI继续操作
+        if (window.gameState) {
+            window.gameState.setThreeSixesPenaltyActive(true);
+        }
+
         const diceDisplay = document.getElementById('diceDisplay');
         if (diceDisplay) {
             diceDisplay.classList.add('dice-shake');
@@ -3068,11 +3321,28 @@ class MultiplayerGameManager {
             window.gameState.consecutiveSixes = 0;
             window.gameState.canReroll = false;
             window.gameState.justRolledSix = false;
+            // 关键：重置游戏阶段为waiting，防止AI继续选棋
+            window.gameState.gamePhase = 'waiting';
+            // 标记AI决策未在进行中
+            window.gameState.setAIDecisionInProgress(false);
+        }
+
+        // 停止思考进度条，防止Bot继续操作
+        if (window.uiUpdater && window.uiUpdater.stopThinkingProgressBar) {
+            window.uiUpdater.stopThinkingProgressBar();
         }
 
         // 更新UI
         if (window.uiUpdater) {
             window.uiUpdater.updateUI();
+        }
+
+        // 延迟等待动画完成
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+        // 清除三次6惩罚标志
+        if (window.gameState) {
+            window.gameState.setThreeSixesPenaltyActive(false);
         }
     }
 
@@ -3145,6 +3415,21 @@ class MultiplayerGameManager {
             // 设置游戏状态
             this.gameInstance.gameState.winner = data.winnerPlayer;
             this.gameInstance.gameState.gamePhase = 'finished';
+
+            // 应用服务器广播的称号统计数据，确保所有客户端称号计算一致
+            try {
+                if (data.titleStats) {
+                    this._applyTitleStats(data.titleStats);
+                    if (window.gameState) {
+                        window.gameState.titleStats = data.titleStats;
+                        if (data.titleStats.totalDistance) window.gameState.totalDistance = data.titleStats.totalDistance;
+                        if (data.titleStats.diceStatistics) window.gameState.diceStatistics = data.titleStats.diceStatistics;
+                        if (data.titleStats.defeatCounts) window.gameState.defeatCounts = data.titleStats.defeatCounts;
+                    }
+                }
+            } catch (e) {
+                // ignore
+            }
 
             // 记录游戏结束时间
             try {
@@ -3250,6 +3535,21 @@ class MultiplayerGameManager {
                     }
                 } else if (typeof this.gameInstance.gameState.recordGameEndTime === 'function') {
                     this.gameInstance.gameState.recordGameEndTime();
+                }
+            } catch (e) {
+                // ignore
+            }
+
+            // 应用服务器广播的称号统计数据
+            try {
+                if (data.titleStats) {
+                    this._applyTitleStats(data.titleStats);
+                    if (window.gameState) {
+                        window.gameState.titleStats = data.titleStats;
+                        if (data.titleStats.totalDistance) window.gameState.totalDistance = data.titleStats.totalDistance;
+                        if (data.titleStats.diceStatistics) window.gameState.diceStatistics = data.titleStats.diceStatistics;
+                        if (data.titleStats.defeatCounts) window.gameState.defeatCounts = data.titleStats.defeatCounts;
+                    }
                 }
             } catch (e) {
                 // ignore
@@ -3630,6 +3930,11 @@ class MultiplayerGameManager {
             if (loadedCount >= this.totalPlayers && this.totalPlayers > 0) {
                 if (window.audioManager) {
                     window.audioManager.allPlayersAudioLoaded = true;
+                    // 如果本地音频也已加载完毕，主动触发 ready 状态
+                    // 避免已触发过 waiting_others 但等待状态无法清除的问题
+                    if (window.audioManager.isLoaded) {
+                        window.audioManager._notifyStatus('ready');
+                    }
                 }
             }
 
@@ -3702,6 +4007,7 @@ class MultiplayerGameManager {
                                     }
                                     aiTakeoverManager.showOverlay();
                                     aiTakeoverManager.updateToggleButton();
+                                    aiTakeoverManager.updateControlButtons();
                                     // 恢复昵称标记（如果需要）
                                     aiTakeoverManager.modifyHumanPlayerNames();
 
@@ -3775,7 +4081,7 @@ class MultiplayerGameManager {
             }
 
             // 恢复游戏状态数据（包括棋子位置）
-            // 只有在游戏状态包含有意义的数据时才进行恢复
+            // 只要有gameData，无论是否是重连都应该恢复！
             if (data.gameSession && data.gameSession.gameData) {
                 const gameData = data.gameSession.gameData;
                 
@@ -3787,25 +4093,19 @@ class MultiplayerGameManager {
                     window.audioManager.onAllPlayersAudioLoaded();
                 }
 
-                if (isRealReconnect) {
-                    console.log('[重连] 收到gameData:', gameData);
-                }
+                console.log('[游戏状态恢复] 收到gameData:', gameData);
 
                 // 检查是否需要恢复：有当前玩家或有棋子不在初始位置
                 const needsRestore = gameData.currentPlayer !== null ||
                     this.hasNonInitialChessPositions(gameData.playerChess);
-                if (isRealReconnect) {
-                    console.log('[重连] needsRestore:', needsRestore, 'currentPlayer:', gameData.currentPlayer);
-                }
-                if (needsRestore) {
-                    if (isRealReconnect) {
-                        console.log('[重连] 开始调用restoreGameState');
-                    }
+                
+                // 观战模式总是恢复
+                // 普通模式只要 needsRestore 为 true 就恢复（即使不是重连！）
+                if (this.isSpectator || needsRestore) {
+                    console.log('[游戏状态恢复] 开始调用restoreGameState');
                     this.restoreGameState(gameData);
                 } else {
-                    if (isRealReconnect) {
-                        console.log('[重连] 跳过restoreGameState，条件不满足');
-                    }
+                    console.log('[游戏状态恢复] 跳过restoreGameState，条件不满足');
                 }
             } else {
                 if (isRealReconnect) {

@@ -116,8 +116,11 @@ class EnergyManager {
 
         console.log(`玩家${player}积分增加: ${oldEnergy.toFixed(1)} -> ${this.playerEnergy[player].toFixed(1)} (+${amount.toFixed(1)})`);
 
+        // 网络回放模式：不添加消息
+        const isReplayMode = window.gameInstance && window.gameInstance.chessPiece && window.gameInstance.chessPiece._isNetworkReplayMode;
+        
         // 发送积分获取的gameInfo消息
-        if (window.gameInfo) {
+        if (window.gameInfo && !isReplayMode) {
             window.gameInfo.addEnergyGain(player, Math.round(amount), false, source, targetPlayer, targetChessIndex);
         }
 

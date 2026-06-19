@@ -32,7 +32,8 @@ class SettlementModal {
         this.dataAnalysisBtn = document.getElementById('data-analysis-btn');
 
         if (this.newGameBtn) {
-            this.newGameBtn.textContent = '返回房间';
+            // 按钮文字由 HTML 模板决定，不再动态覆盖
+            // game.html: 返回房间 | spectate.html: 返回主页
         }
 
         this.bindEvents();
@@ -49,6 +50,12 @@ class SettlementModal {
         // 返回房间按钮事件
         if (this.newGameBtn) {
             this.newGameBtn.addEventListener('click', () => {
+                // 观战模式直接返回主页
+                const isSpectator = window.gameInstance?.multiplayerGameManager?.isSpectator;
+                if (isSpectator) {
+                    window.location.href = '/';
+                    return;
+                }
                 this.returnToRoom();
             });
         }

@@ -1634,15 +1634,27 @@ class MultiplayerManager {
 
                 this.stopOfflineCountdown(data.playerId);
 
-                const deleteResult = this.players.delete(data.playerId);
-                console.log('删除玩家结果:', {
-                    deleteResult,
-                    afterDelete: Array.from(this.players.keys()),
-                    remainingPlayers: Array.from(this.players.values()).map(p => ({ id: p.id, color: p.color, nickname: p.nickname }))
-                });
+                // 更新房间数据（包含最新的房间状态）
+                if (data.room) {
+                    this.currentRoom = data.room;
+                    // 更新玩家列表
+                    this.players.clear();
+                    data.room.players.forEach(player => {
+                        this.players.set(player.id, player);
+                    });
+                } else {
+                    // 如果没有data.room，只删除离开的玩家
+                    const deleteResult = this.players.delete(data.playerId);
+                    console.log('删除玩家结果:', {
+                        deleteResult,
+                        afterDelete: Array.from(this.players.keys()),
+                        remainingPlayers: Array.from(this.players.values()).map(p => ({ id: p.id, color: p.color, nickname: p.nickname }))
+                    });
+                }
 
                 this.updatePlayerDisplay();
                 this.updateRoomInfo();
+                this.updateStartGameButton();
                 break;
 
             case 'playerDisconnected':
@@ -1691,6 +1703,7 @@ class MultiplayerManager {
                 this.stopOfflineCountdown(data.playerId);
                 this.updatePlayerDisplay();
                 this.updateRoomInfo();
+                this.updateStartGameButton();
                 break;
 
             case 'roomLeft':
@@ -3566,6 +3579,9 @@ class MultiplayerManager {
 
         // 同步更新color-options状态
         this.updateColorOptionsForAI(aiPlayers);
+
+        // 更新开始游戏按钮状态
+        this.updateStartGameButton();
     }
 
     // 更新color-options中AI玩家的状态
@@ -4003,20 +4019,20 @@ class MultiplayerManager {
         // 检查是否所有玩家都准备好了
         const allPlayersReady = this.checkAllPlayersReady();
 
-        // 计算总玩家数
-        const realPlayerCount = this.players.size;
-        const aiPlayerCount = (this.currentRoom && this.currentRoom.settings && this.currentRoom.settings.aiPlayers)
-            ? this.currentRoom.settings.aiPlayers.length : 0;
-        const totalPlayers = realPlayerCount + aiPlayerCount;
+        // 计算在线真实玩家数
+        const onlineRealPlayerCount = Array.from(this.players.values())
+            .filter(p => !p.isAI && (p.isConnected !== false)).length;
 
-        // 至少需要2个玩家，且所有玩家都准备好
-        startBtn.disabled = totalPlayers < 2 || !allPlayersReady;
+        // 至少需要2个在线真实玩家，且所有玩家都准备好
+        startBtn.disabled = onlineRealPlayerCount < 2 || !allPlayersReady;
     }
 
     // 检查是否所有玩家都准备好了
     checkAllPlayersReady() {
         // 遍历所有真实玩家
         for (const [playerId, player] of this.players.entries()) {
+            if (player.isAI) continue;
+            
             // 房主自动准备
             if (player.isHost) {
                 continue;
@@ -4040,14 +4056,12 @@ class MultiplayerManager {
     startGame() {
         if (!this.isHost || !this.wsClient) return;
 
-        // 计算总玩家数：真实玩家 + AI玩家
-        const realPlayerCount = this.players.size;
-        const aiPlayerCount = (this.currentRoom && this.currentRoom.settings && this.currentRoom.settings.aiPlayers)
-            ? this.currentRoom.settings.aiPlayers.length : 0;
-        const totalPlayers = realPlayerCount + aiPlayerCount;
+        // 计算在线真实玩家数
+        const onlineRealPlayerCount = Array.from(this.players.values())
+            .filter(p => !p.isAI && (p.isConnected !== false)).length;
 
-        if (totalPlayers < 2) {
-            this.showError('至少需要2个玩家才能开始游戏');
+        if (onlineRealPlayerCount < 2) {
+            this.showError('至少需要2个在线玩家才能开始游戏');
             return;
         }
 

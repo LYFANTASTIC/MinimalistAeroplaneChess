@@ -237,9 +237,9 @@ class GameInfo {
                     const hasTarget = targetPlayer !== undefined && targetPlayer !== null;
                     const targetName = hasTarget ? this.getPlayerName(targetPlayer) : '对手';
                     const targetSpan = hasTarget ? `<span class="player-text player-${targetPlayer}">${targetName}</span>` : `<span class="action-text">对手</span>`;
-                    notificationText = `${playerSpan}<span class="beat-text"> 击败了 </span>${targetSpan} ${energySpan}`;
+                    notificationText = `${playerSpan}<span class="beat-text"> 击败 </span>${targetSpan} ${energySpan}`;
                 } else if (messageData.data.source === 'mysteryBox') {
-                    notificationText = `${playerSpan}<span class="action-text"> 使用了盲盒 </span>${energySpan}`;
+                    notificationText = `${playerSpan}<span class="action-text"> 使用了 </span><span class="skill-name-text">[盲盒]</span> ${energySpan}`;
                 } else {
                     notificationText = `${playerSpan}<span class="action-text"> 获得 </span>${energySpan}`;
                 }
@@ -360,7 +360,7 @@ class GameInfo {
     formatDiceRoll(player, value) {
         const playerName = this.getPlayerName(player);
         const playerSpan = `<span class="player-text player-${player}">${playerName}</span>`;
-        const actionSpan = `<span class="action-text"> 投掷了 </span>`;
+        const actionSpan = `<span class="action-text"> 摇到了 </span>`;
         const diceSpan = value === 6
             ? `<span class="dice-special">${value}</span>`
             : `<span class="dice-text">${value}</span>`;
@@ -435,7 +435,7 @@ class GameInfo {
     formatThreeSixesPenalty(player) {
         const playerName = this.getPlayerName(player);
         const playerSpan = `<span class="player-text player-${player}">${playerName}</span>`;
-        const actionSpan = `<span class="action-text"> 连续投掷3次 </span>`;
+        const actionSpan = `<span class="action-text"> 连续摇到3次 </span>`;
         const diceSpan = `<span class="dice-special">6</span>`;
         const penaltySpan = `<span class="action-text"> 点，所有棋子返回起点！</span>`;
 
@@ -451,7 +451,7 @@ class GameInfo {
         const targetSpan = `<span class="player-text player-${targetPlayer}">${targetPlayerName}</span>`;
         const deSpan = `<span class="action-text"> 的</span>`;
         const stackTextSpan = `<span class="stack-text"> [叠子] </span>`;
-        const collisionSpan = `<span class="action-text">发生碰撞，双方的棋子都得返回起点</span>`;
+        const collisionSpan = `<span class="action-text">发生碰撞，双方碰撞的棋子返回起点</span>`;
 
         return `${playerSpan}${actionSpan}${targetSpan}${deSpan}${stackTextSpan}${collisionSpan}`;
     }
@@ -519,7 +519,7 @@ class GameInfo {
             const hasTarget = targetPlayer !== undefined && targetPlayer !== null;
             const targetName = hasTarget ? this.getPlayerName(targetPlayer) : '对手';
             const targetSpan = hasTarget ? `<span class="player-text player-${targetPlayer}">${targetName}</span>` : `<span class="action-text"> 对手 </span>`;
-            actionSpan1 = `<span class="beat-text"> 击败了 </span>${targetSpan}<span class="action-text">！获得 </span>`;
+            actionSpan1 = `<span class="beat-text"> 击败 </span>${targetSpan}<span class="action-text">！获得 </span>`;
         } else if (source === 'mysteryBox') {
             actionSpan1 = `<span class="action-text"> 使用了盲盒，获得 </span>`;
         }

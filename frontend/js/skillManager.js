@@ -15,8 +15,6 @@ class SkillManager {
         this.currentNotification = null;
         this.notificationTimeout = null;
         this.hintTimer = null;
-        this.notificationAnchorCenterX = null;
-        this.layoutCompensationX = 0;
     }
 
     /**
@@ -66,37 +64,6 @@ class SkillManager {
         // 启动提示定时器
         this.startHintTimer();
 
-        // 记录初始化基准中心点，并在窗口变化后重置基准
-        this.cacheNotificationAnchor();
-        if (!this._onResizeReanchor) {
-            this._onResizeReanchor = () => {
-                this.notificationAnchorCenterX = null;
-                this.applyLayoutCompensation(0);
-                this.cacheNotificationAnchor();
-            };
-            window.addEventListener('resize', this._onResizeReanchor);
-        }
-    }
-
-    cacheNotificationAnchor() {
-        requestAnimationFrame(() => {
-            const gameContainer = document.querySelector('.game-container');
-            if (!gameContainer) return;
-            const rect = gameContainer.getBoundingClientRect();
-            this.notificationAnchorCenterX = rect.left + rect.width / 2;
-        });
-    }
-
-    applyLayoutCompensation(offsetX) {
-        const mainLayout = document.querySelector('.main-layout');
-        if (!mainLayout) return;
-        if (Math.abs(offsetX) < 0.5) {
-            mainLayout.style.transform = '';
-            this.layoutCompensationX = 0;
-            return;
-        }
-        mainLayout.style.transform = `translateX(${offsetX}px)`;
-        this.layoutCompensationX = offsetX;
     }
 
     /**
@@ -156,11 +123,9 @@ class SkillManager {
         if (this.skillPanel) {
             this.closePanel();
         }
-        if (this.skillBtn) {
-            this.skillBtn.classList.add('is-hidden');
-            this.skillBtn.classList.remove('skill-btn-hint');
-        }
         this.stopHintTimer();
+        // 让updateButtonVisibility来处理按钮的显示/隐藏
+        this.updateButtonVisibility();
     }
 
     enableAfterAITakeover() {
@@ -168,11 +133,10 @@ class SkillManager {
         const isSpectator = window.multiplayerGameManager && window.multiplayerGameManager.isSpectator;
         if (!energyManager.isSkillModeEnabled() || isSpectator) return;
         
-        if (this.skillBtn) {
-            this.skillBtn.classList.remove('is-hidden');
-        }
         this.updateSkillAvailability();
         this.startHintTimer();
+        // 让updateButtonVisibility来处理按钮的显示/隐藏
+        this.updateButtonVisibility();
     }
 
     /**
@@ -198,8 +162,11 @@ class SkillManager {
         const isSkillMode = energyManager.isSkillModeEnabled();
         const loadingIndicator = document.getElementById('loadingIndicator');
         const isLoading = loadingIndicator && loadingIndicator.style.display === 'flex';
+        // 检查是否处于AI托管状态
+        const isAITakeoverActive = window.aiTakeoverManager && window.aiTakeoverManager.isActive;
 
-        if (isSpectator || !isSkillMode || isLoading) {
+        // 如果AI托管正在运行，则不显示技能按钮
+        if (isSpectator || !isSkillMode || isLoading || isAITakeoverActive) {
             skillBtn.style.display = 'none';
         } else {
             skillBtn.style.display = 'block';
@@ -492,11 +459,6 @@ class SkillManager {
         // 标记这是遥控骰子（6点不触发连投奖励）
         gameState.isRemoteDice = true;
 
-        // 添加骰子投掷信息
-        if (gameInfo) {
-            gameInfo.addDiceRoll(player, diceValue);
-        }
-
         // 直接调用handleDiceResult进入棋子移动阶段
         if (window.gameInstance && window.gameInstance.dice) {
             await window.gameInstance.dice.handleDiceResult();
@@ -579,11 +541,6 @@ class SkillManager {
         // 标记这是遥控骰子（6点不触发连投奖励）
         gameState.isRemoteDice = true;
 
-        // 添加骰子投掷信息
-        if (gameInfo) {
-            gameInfo.addDiceRoll(player, diceValue);
-        }
-
         // 直接调用handleDiceResult进入棋子移动阶段
         if (window.gameInstance && window.gameInstance.dice) {
             await window.gameInstance.dice.handleDiceResult();
@@ -642,7 +599,7 @@ class SkillManager {
 
         // 在线模式下同步积分数值动画
         if (gameState.getIsOnlineMultiplayer() && window.gameInstance && window.gameInstance.multiplayerGameManager) {
-            window.gameInstance.multiplayerGameManager.syncEnergyGainAnimation(energyGain);
+            window.gameInstance.multiplayerGameManager.syncEnergyGainAnimation(energyGain, player);
         }
 
         // 等待积分数值动画完成（1秒）
@@ -1092,23 +1049,15 @@ class SkillManager {
         const targetContainer = document.body;
 
         // 预处理：计算最优宽度以实现平衡换行，避免出现一行很长一行很短的情况
+        // 将通知移出视口，避免影响页面布局
+        notification.style.position = 'absolute';
+        notification.style.top = '-9999px';
+        notification.style.left = '-9999px';
         notification.style.visibility = 'hidden';
         notification.style.whiteSpace = 'nowrap';
         notification.style.width = 'max-content';
+        notification.style.pointerEvents = 'none';
         targetContainer.appendChild(notification);
-
-        // 使用初始化时记录的棋盘中心作为通知锚点，避免运行中基准漂移
-        if (gameContainer) {
-            const rect = gameContainer.getBoundingClientRect();
-            const currentCenter = rect.left + rect.width / 2;
-            if (this.notificationAnchorCenterX === null) {
-                this.notificationAnchorCenterX = currentCenter;
-            }
-            const drift = this.notificationAnchorCenterX - currentCenter;
-            this.applyLayoutCompensation(drift);
-            const centerLeft = this.notificationAnchorCenterX;
-            notification.style.left = `${centerLeft}px`;
-        }
 
         // 测量实际单行宽度
         const fullWidth = notification.offsetWidth;
@@ -1127,8 +1076,20 @@ class SkillManager {
             notification.style.width = 'max-content';
         }
 
+        // 使用 fixed 定位，以游戏棋盘中心为锚点居中，不修改 main-layout 的 transform
+        notification.style.position = 'fixed';
+        notification.style.top = '20px';
+        if (gameContainer) {
+            const rect = gameContainer.getBoundingClientRect();
+            const boardCenterX = rect.left + rect.width / 2;
+            notification.style.left = `${boardCenterX}px`;
+        } else {
+            notification.style.left = '50%';
+        }
+        notification.style.transform = 'translateX(-50%)';
         notification.style.whiteSpace = 'normal';
         notification.style.visibility = 'visible';
+        notification.style.pointerEvents = 'none';
 
         this.currentNotification = notification;
 

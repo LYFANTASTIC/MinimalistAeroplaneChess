@@ -85,6 +85,11 @@ class FlyingChessGame {
         try {
             // 确保音频管理器处于开启状态
             audioManager.unmute();
+            // 更新音频开关按钮文本
+            const toggleAudioBtn = document.getElementById('toggleAudio');
+            if (toggleAudioBtn) {
+                toggleAudioBtn.textContent = '关闭音效';
+            }
             
             // 1. 重置游戏状态（在处理URL参数之前）
             gameState.resetGameState();
@@ -912,12 +917,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const controlTitle = document.querySelector('.control-title');
     const roomCodeDisplay = document.getElementById('gameRoomCodeDisplay');
     const roomCodeElement = document.getElementById('gameRoomCode');
+    const roomCodeDisplayColumn = document.getElementById('gameRoomCodeDisplayColumn');
+    const roomCodeElementColumn = document.getElementById('gameRoomCodeColumn');
 
     if (roomCode) {
         // 联机模式：显示房间号
         if (roomCodeDisplay && roomCodeElement) {
             roomCodeElement.textContent = roomCode;
             roomCodeDisplay.style.display = 'block';
+        }
+        if (roomCodeDisplayColumn && roomCodeElementColumn) {
+            roomCodeElementColumn.textContent = roomCode;
         }
         if (controlTitle) {
             controlTitle.style.display = 'block';

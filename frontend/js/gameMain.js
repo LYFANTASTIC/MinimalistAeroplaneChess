@@ -69,6 +69,9 @@ class FlyingChessGame {
         // 将animation暴露到全局，供multiplayerGameManager使用
         window.animation = this.animation;
 
+        // 将aiTakeoverManager暴露到全局，供其他模块使用
+        window.aiTakeoverManager = aiTakeoverManager;
+
         // 设置全局游戏实例引用（供其他模块使用）
         window.gameInstance = this;
 
@@ -127,6 +130,14 @@ class FlyingChessGame {
         const loadingIndicator = document.getElementById('loadingIndicator');
         if (loadingIndicator) loadingIndicator.style.display = 'none';
 
+        // 确保音效是开启状态（刷新后可能需要重新激活）
+        audioManager.unmute();
+        // 更新音频开关按钮文本
+        const toggleAudioBtn = document.getElementById('toggleAudio');
+        if (toggleAudioBtn) {
+            toggleAudioBtn.textContent = '关闭音效';
+        }
+
         // 只有在未暂停时才恢复 UI
         if (gameState.getIsPaused()) return;
 
@@ -147,11 +158,20 @@ class FlyingChessGame {
 
         this.initializeControlButtonsVisibility();
         this.skillManager.updateButtonVisibility();
+        // 更新 AI 托管按钮显示
+        aiTakeoverManager.updateControlButtons();
     }
 
     // 初始化游戏
     initializeGame() {
         try {
+            audioManager.unmute();
+            // 更新音频开关按钮文本
+            const toggleAudioBtn = document.getElementById('toggleAudio');
+            if (toggleAudioBtn) {
+                toggleAudioBtn.textContent = '关闭音效';
+            }
+
             // 1. 重置游戏状态（在处理URL参数之前）
             gameState.resetGameState();
 
@@ -1230,12 +1250,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const controlTitle = document.querySelector('.control-title');
     const roomCodeDisplay = document.getElementById('gameRoomCodeDisplay');
     const roomCodeElement = document.getElementById('gameRoomCode');
+    const roomCodeDisplayColumn = document.getElementById('gameRoomCodeDisplayColumn');
+    const roomCodeElementColumn = document.getElementById('gameRoomCodeColumn');
 
     if (roomCode) {
         // 联机模式：显示房间号
         if (roomCodeDisplay && roomCodeElement) {
             roomCodeElement.textContent = roomCode;
             roomCodeDisplay.style.display = 'block';
+        }
+        if (roomCodeDisplayColumn && roomCodeElementColumn) {
+            roomCodeElementColumn.textContent = roomCode;
         }
         if (controlTitle) {
             controlTitle.style.display = 'block';

@@ -15,8 +15,10 @@ class BotController {
         this.chessPiece = null; // 将在gameMain.js中设置
         this.botDifficulties = {}; // 存储每个AI玩家的难度设置
         this.isProcessing = false; // 防止重复触发的标志
+        this._isItemInProgress = false; // 道具使用中标志，防止重复使用道具
         this.lastProcessedPlayer = null; // 记录上次处理的玩家
         this.lastProcessedPhase = null; // 记录上次处理的阶段
+        this.lastProcessedTime = 0; // 记录上次处理的时间戳
     }
 
     setChessPiece(chessPiece) {
@@ -111,6 +113,12 @@ class BotController {
             return false;
         }
 
+        // 检查是否处于三次6惩罚中
+        if (gameState.getThreeSixesPenaltyActive()) {
+            console.log(`[AI] 三次6惩罚中，跳过掷骰`);
+            return false;
+        }
+
         const gamePhase = gameState.getGamePhase();
         const isRolling = gameState.getIsRolling();
 
@@ -173,6 +181,14 @@ class BotController {
 
         // 再次检查游戏是否在延迟期间被暂停
         if (gameState.getIsPaused()) {
+            return false;
+        }
+
+        // 再次检查游戏阶段是否仍然允许掷骰子
+        const gamePhaseAfterThinking = gameState.getGamePhase();
+        const isRollingAfterThinking = gameState.getIsRolling();
+        if ((gamePhaseAfterThinking !== 'rolling' && gamePhaseAfterThinking !== 'waiting') || isRollingAfterThinking) {
+            console.log(`[AI] 游戏阶段已变更，取消掷骰`);
             return false;
         }
 
@@ -390,7 +406,7 @@ class BotController {
         }
 
         // 3. 盲盒 (花费15)
-        if (currentEnergy >= 15 && currentEnergy < 85 && !selectedSkill) {
+        if (currentEnergy >= 15 && currentEnergy < 40 && !selectedSkill) {
             const isSignificantlyBehind = this.isPlayerSignificantlyBehind(player);
             if (isSignificantlyBehind) {
                 const rand = Math.random();
@@ -445,17 +461,24 @@ class BotController {
             };
             const cost = skillCosts[selectedSkill];
 
-            skillManager.useSkill(selectedSkill, cost, player);
+            // 设置道具使用标志，防止异步执行期间被重复触发
+            this._isItemInProgress = true;
+            try {
+                skillManager.useSkill(selectedSkill, cost, player);
 
-            if (selectedSkill === 'remote-dice') {
-                console.log(`[AI决策] 遥控骰子选择了最优获益点数: ${bestDiceValue}`);
-                await skillManager.handleDiceSelection(bestDiceValue, player, null);
+                if (selectedSkill === 'remote-dice') {
+                    console.log(`[AI决策] 遥控骰子选择了最优获益点数: ${bestDiceValue}`);
+                    await skillManager.handleDiceSelection(bestDiceValue, player, null);
+                    return true;
+                } else if (selectedSkill === 'mysteryBox') {
+                    // 等待盲盒完整动画完成后才能解除锁定
+                    await new Promise(r => setTimeout(r, 2500));
+                    return true;
+                }
                 return true;
-            } else if (selectedSkill === 'mysteryBox') {
-                await new Promise(r => setTimeout(r, 1500));
-                return true; 
+            } finally {
+                this._isItemInProgress = false;
             }
-            return true;
         } else {
             // 如果积分足以使用任何一个道具但最终没用
             if (currentEnergy >= 15) {
@@ -885,6 +908,12 @@ class BotController {
             return false;
         }
 
+        // 检查是否处于三次6惩罚中
+        if (gameState.getThreeSixesPenaltyActive()) {
+            console.log(`[AI] 三次6惩罚中，跳过选棋`);
+            return false;
+        }
+
         // 检查游戏是否暂停
         if (gameState.getIsPaused()) {
             return false;
@@ -947,6 +976,14 @@ class BotController {
             return false;
         }
 
+        // 再次检查游戏阶段是否仍然是selecting（防止三次6惩罚或其他状态变更）
+        const gamePhaseAfterThinking = gameState.getGamePhase();
+        if (gamePhaseAfterThinking !== 'selecting') {
+            console.log(`[AI] 游戏阶段已从selecting变为${gamePhaseAfterThinking}，取消选棋`);
+            gameState.setAIDecisionInProgress(false);
+            return false;
+        }
+
         // 根据AI难度选择策略
         const difficulty = this.getBotDifficulty(currentPlayer);
         let selectedChess;
@@ -969,6 +1006,14 @@ class BotController {
 
         // 最后一次检查游戏是否在操作延迟期间被暂停
         if (gameState.getIsPaused()) {
+            gameState.setAIDecisionInProgress(false);
+            return false;
+        }
+
+        // 再次检查游戏阶段是否仍然是selecting
+        const gamePhaseAfterAction = gameState.getGamePhase();
+        if (gamePhaseAfterAction !== 'selecting') {
+            console.log(`[AI] 游戏阶段已从selecting变为${gamePhaseAfterAction}，取消选棋`);
             gameState.setAIDecisionInProgress(false);
             return false;
         }
@@ -1281,6 +1326,12 @@ class BotController {
             return;
         }
 
+        // 检查是否处于三次6惩罚中
+        if (gameState.getThreeSixesPenaltyActive()) {
+            console.log(`[AI] 三次6惩罚中，跳过Bot回合处理`);
+            return;
+        }
+
         // 检查游戏是否暂停
         if (gameState.getIsPaused()) {
             return;
@@ -1291,19 +1342,34 @@ class BotController {
             return;
         }
 
-        // 防止重复触发：如果正在处理中，检查是否是相同的玩家和阶段
+        // 如果道具正在使用中，禁止任何新的操作
+        if (this._isItemInProgress) {
+            console.log(`[AI] 道具正在使用中，跳过Bot回合处理`);
+            return;
+        }
+
+        const now = Date.now();
+        
+        // 防止重复触发
         if (this.isProcessing) {
-            const isSameContext = this.lastProcessedPlayer === currentPlayer &&
-                this.lastProcessedPhase === gamePhase;
-            if (isSameContext) {
+            // 如果正在处理，检查是否是相同的玩家和阶段，且时间间隔小于1秒
+            const isSameContext = this.lastProcessedPlayer === currentPlayer && 
+                                 this.lastProcessedPhase === gamePhase;
+            const isRecent = (now - this.lastProcessedTime) < 1000;
+            
+            if (isSameContext && isRecent) {
+                console.log(`[AI] 已有Bot操作正在处理中，跳过`);
                 return;
             }
+            // 否则允许继续处理（比如6点重投，虽然玩家相同但是阶段可能变了）
+            console.log(`[AI] 检测到新的操作请求，覆盖旧的处理标志`);
         }
 
         // 设置处理标志
         this.isProcessing = true;
         this.lastProcessedPlayer = currentPlayer;
         this.lastProcessedPhase = gamePhase;
+        this.lastProcessedTime = now;
 
         try {
             // 传送门模式优先执行选棋，避免因阶段竞争误入掷骰分支
