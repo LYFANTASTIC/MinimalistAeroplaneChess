@@ -213,6 +213,42 @@ class ChessPiece {
     }
 
     /**
+     * 高亮传送门的源格子和目标格子（白色发光）
+     * @param {number} player - 玩家编号
+     * @param {number} fromAbsPos - 源格子的绝对位置
+     * @param {number} targetAbsPos - 目标格子的绝对位置
+     */
+    highlightTeleportGrids(player, fromAbsPos, targetAbsPos) {
+        const svg = document.getElementById('board-svg');
+        if (!svg) return;
+
+        // 清除之前的残留高亮
+        this.clearTeleportHighlights();
+
+        // 高亮源格子和目标格子
+        // 终点通道（51-56）每个玩家各自独立，需要用 player class 过滤
+        [fromAbsPos, targetAbsPos].forEach(absPos => {
+            if (absPos === undefined || absPos === null) return;
+            const sel = absPos >= 51
+                ? `[data-cpos="${absPos}"].player-${player}`
+                : `[data-cpos="${absPos}"]`;
+            const els = svg.querySelectorAll(sel);
+            els.forEach(el => el.classList.add('teleport-grid-highlight'));
+        });
+    }
+
+    /**
+     * 清除传送门格子高亮
+     */
+    clearTeleportHighlights() {
+        const svg = document.getElementById('board-svg');
+        if (!svg) return;
+        svg.querySelectorAll('.teleport-grid-highlight').forEach(el => {
+            el.classList.remove('teleport-grid-highlight');
+        });
+    }
+
+    /**
      * 处理传送门道具的棋子移动
      * @param {number} player - 玩家编号
      * @param {number} chessIndex - 棋子索引
@@ -313,9 +349,20 @@ class ChessPiece {
             const targetPosition = this.selectTeleportTarget(chess.position, validPositions);
             const fromPosition = chess.position;
 
+            // 高亮源格子和目标格子（白色发光）
+            const fromAbsPos = this.utils.getAbsolutePosition(player, fromPosition);
+            const targetAbsPos = this.utils.getAbsolutePosition(player, targetPosition);
+            this.highlightTeleportGrids(player, fromAbsPos, targetAbsPos);
+
             // 记录前进距离（仅记录前进的，后退的不计）
             if (targetPosition > fromPosition) {
                 this.gameState.incrementTotalDistance(player, targetPosition - fromPosition);
+            }
+
+            // 记录最大传送距离（用于称号统计）
+            const teleportDist = Math.abs(targetPosition - fromPosition);
+            if (teleportDist > this.gameState.titleStats.maxTeleportDistance[player]) {
+                this.gameState.titleStats.maxTeleportDistance[player] = teleportDist;
             }
 
             if (window.gameInstance && window.gameInstance.skillManager) {
@@ -360,9 +407,10 @@ class ChessPiece {
                     setTimeout(() => {
                         chessElement.style.opacity = '1';
 
-                        // 动画完成后清除过渡类
+                        // 动画完成后清除过渡类和高亮
                         setTimeout(() => {
                             chessElement.classList.remove('chess-teleport-fade');
+                            this.clearTeleportHighlights();
                         }, 200);
                     }, 50);
                 }, 200);
@@ -373,6 +421,8 @@ class ChessPiece {
                 }
                 // 更新所有棋子位置以重新计算叠子高亮状态
                 this.updateAllChessPositions();
+                // 没有淡出动画，立即清除高亮
+                this.clearTeleportHighlights();
             }
 
             // 更新UI
@@ -390,6 +440,8 @@ class ChessPiece {
             );
         } catch (error) {
             console.error('[传送门] 处理传送时出错:', error);
+            // 清除格子高亮
+            this.clearTeleportHighlights();
             // 确保清除传送门模式标记并恢复骰子图标
             if (window.gameInstance) {
                 window.gameInstance.isTeleportMode = false;
@@ -713,15 +765,9 @@ class ChessPiece {
                         setTimeout(async () => {
                             const stackedChesses = stackInfo.stackInfo.chessList;
 
-                            // 添加击败信息和更新击败计数（使用闭包捕获的回放标志，避免 setTimeout 延迟后标志位已被重置）
+                            // 仅更新击败计数，不重复添加击败信息（叠子碰撞信息已由 addStackCollision 输出）
                             for (const stackedChess of stackedChesses) {
-                                if (!_collisionReplayMode) {
-                                    gameInfo.addChessBeat(player, stackedChess.player, stackedChess.chessIndex, false, false, true);
-                                }
                                 this.gameState.incrementDefeatCount(player, stackedChess.player);
-                            }
-                            if (!_collisionReplayMode) {
-                                gameInfo.addChessBeat(stackInfo.stackPlayer, player, chessIndex, false, false, true);
                             }
                             this.gameState.incrementDefeatCount(stackInfo.stackPlayer, player);
 
@@ -824,12 +870,12 @@ class ChessPiece {
             this.gameState.selectedChess = null;
 
             // 在最终位置检查beat操作（只有正常移动且未完成的棋子才检查）
-            // 如果反弹后回到原位置，不进行beat检测，避免误判
+            // 注意：起跳点不排除beat检测，因为叠子/终点反弹不走 handleSpecialPositions，
+            // 如果起跳点有其他玩家的棋子需要正常 beat；正常移动时 handleSpecialPositions 内部
+            // 已有独立的 landing beat 检测（在 animateJump 中），此处不冲突
             const shouldCheckBeat = !chess.finished &&
                 actualFinalPosition <= 51 &&
-                actualFinalPosition >= 0 &&
-                !this.utils.isJumpPoint(actualFinalPosition) &&
-                actualFinalPosition !== originalPosition; // 排除反弹回到原位置的情况
+                actualFinalPosition >= 0;
 
             if (shouldCheckBeat) {
                 // 捕获本次移动是否由遥控/道具骰子触发

@@ -1649,9 +1649,10 @@ class MultiplayerGameManager {
     /**
      * 同步多面骰子显示
      */
-    syncPolyhedralDice(diceValue) {
+    syncPolyhedralDice(diceValue, playerNumber) {
         this.sendMessage('polyhedralDice', {
             diceValue,
+            playerNumber,
             timestamp: Date.now()
         });
     }
@@ -1715,7 +1716,12 @@ class MultiplayerGameManager {
         if (data.playerId === this.playerId) return; // 忽略自己的消息
 
         if (data.show) {
-            console.log(`[同步] 玩家${this.getPlayerNumberByPlayerId(data.playerId)}开启传送门`);
+            const playerNumber = this.getPlayerNumberByPlayerId(data.playerId);
+            // 累计道具使用次数（远程玩家）
+            if (window.gameState && window.gameState.titleStats) {
+                window.gameState.titleStats.skillUseCount[playerNumber] =
+                    (window.gameState.titleStats.skillUseCount[playerNumber] || 0) + 1;
+            }
         }
 
         if (this.gameInstance && this.gameInstance.skillManager) {
@@ -1737,7 +1743,22 @@ class MultiplayerGameManager {
     handlePolyhedralDice(data) {
         if (data.playerId === this.playerId) return; // 忽略自己的消息
 
-        console.log(`[同步] 玩家${this.getPlayerNumberByPlayerId(data.playerId)}使用多面骰子: ${data.diceValue}`);
+        const playerNumber = data.playerNumber || this.getPlayerNumberByPlayerId(data.playerId);
+        console.log(`[同步] 玩家${playerNumber}使用多面骰子: ${data.diceValue}`);
+
+        // 更新 titleStats（远程玩家也需要记录，否则称号无法触发）
+        if (window.gameState && window.gameState.titleStats) {
+            // 累计道具使用次数
+            window.gameState.titleStats.skillUseCount[playerNumber] =
+                (window.gameState.titleStats.skillUseCount[playerNumber] || 0) + 1;
+
+            if (data.diceValue > (window.gameState.titleStats.polyhedralMax[playerNumber] || 0)) {
+                window.gameState.titleStats.polyhedralMax[playerNumber] = data.diceValue;
+            }
+            if (data.diceValue < (window.gameState.titleStats.polyhedralMin[playerNumber] || 99)) {
+                window.gameState.titleStats.polyhedralMin[playerNumber] = data.diceValue;
+            }
+        }
 
         // 播放道具音效
         if (window.audioManager) {
@@ -1755,13 +1776,27 @@ class MultiplayerGameManager {
     handleMysteryBoxIcon(data) {
         if (data.playerId === this.playerId) return; // 忽略自己的消息
 
+        // 更新 titleStats（远程玩家的盲盒称号数据）
+        const playerNumber = data.playerNumber || this.getPlayerNumberByPlayerId(data.playerId);
+        if (window.gameState && window.gameState.titleStats) {
+            // 累计道具使用次数
+            window.gameState.titleStats.skillUseCount[playerNumber] =
+                (window.gameState.titleStats.skillUseCount[playerNumber] || 0) + 1;
+
+            if (data.energyGain > (window.gameState.titleStats.mysteryBoxMax[playerNumber] || 0)) {
+                window.gameState.titleStats.mysteryBoxMax[playerNumber] = data.energyGain;
+            }
+            if (data.energyGain < (window.gameState.titleStats.mysteryBoxMin[playerNumber] || 99)) {
+                window.gameState.titleStats.mysteryBoxMin[playerNumber] = data.energyGain;
+            }
+        }
+
         // 播放道具音效
         if (window.audioManager) {
             window.audioManager.playSkillSound();
         }
 
         if (this.gameInstance && this.gameInstance.skillManager) {
-            const playerNumber = data.playerNumber || this.getPlayerNumberByPlayerId(data.playerId);
             this.gameInstance.skillManager.showMysteryBoxIcon(playerNumber);
         }
     }
@@ -1884,7 +1919,7 @@ class MultiplayerGameManager {
             return;
         }
 
-        console.log(`[同步] 玩家${data.player}掷出了${data.diceValue}点`);
+        console.log(`[同步] 玩家${data.player}摇到了${data.diceValue}点`);
 
         // 获取本地玩家编号和掷骰子玩家编号
         const localPlayerNumber = this.getPlayerNumberByPlayerId(this.playerId);
@@ -2157,30 +2192,68 @@ class MultiplayerGameManager {
                 return;
             }
 
-            // 无论什么移动类型，先确保视觉位置正确更新（传送门也立即更新，再叠加淡入淡出）
-            if (this.gameInstance.chessPiece && this.gameInstance.chessPiece.animation) {
-                this.gameInstance.chessPiece.animation.bringToFront(data.player, data.chessIndex);
-                this.gameInstance.chessPiece.animation.updateChessPosition(data.player, data.chessIndex);
+            // 传送门移动暂不更新视觉位置
+            if (data.moveType !== 'teleport') {
+                if (this.gameInstance.chessPiece && this.gameInstance.chessPiece.animation) {
+                    this.gameInstance.chessPiece.animation.bringToFront(data.player, data.chessIndex);
+                    this.gameInstance.chessPiece.animation.updateChessPosition(data.player, data.chessIndex);
+                }
             }
 
-            // 如果是传送门移动，额外叠加淡入淡出动画
+            // 如果是传送门移动，叠加淡入淡出和格子高亮
             if (data.moveType === 'teleport' && chess && chess.element) {
+                // 记录最大传送距离（用于称号统计）
+                const fromPos = data.fromPosition !== undefined ? data.fromPosition : previousPosition;
+                const targetPos = data.toPosition !== undefined ? data.toPosition : data.position;
+                if (window.gameState && window.gameState.titleStats && fromPos !== undefined) {
+                    const teleportDist = Math.abs(targetPos - fromPos);
+                    if (teleportDist > (window.gameState.titleStats.maxTeleportDistance[data.player] || 0)) {
+                        window.gameState.titleStats.maxTeleportDistance[data.player] = teleportDist;
+                    }
+                }
+
                 // 播放传送音效
                 if (window.audioManager) {
                     window.audioManager.playFlySound();
                 }
 
+                // 高亮源格子和目标格子（白色发光）
+                // 此时棋子还显示在源位置，不会被遮挡
+                if (this.gameInstance.chessPiece) {
+                    // data.position 和 data.toPosition 都是目标位置，data.position 一定存在
+                    const targetPos = data.toPosition !== undefined ? data.toPosition : data.position;
+                    // data.fromPosition 可能因旧服务器丢失，用 previousPosition 兜底
+                    const fromPos = data.fromPosition !== undefined ? data.fromPosition : previousPosition;
+                    const fromAbsPos = this.gameInstance.chessPiece.utils.getAbsolutePosition(data.player, fromPos);
+                    const toAbsPos = this.gameInstance.chessPiece.utils.getAbsolutePosition(data.player, targetPos);
+                    this.gameInstance.chessPiece.highlightTeleportGrids(data.player, fromAbsPos, toAbsPos);
+                }
+
                 const chessElement = chess.element;
-                // 淡出后淡入：先设置过渡，强制重排确保注册，再改 opacity
+                // 淡出：先设置过渡，强制重排确保注册，再改 opacity
                 chessElement.style.transition = 'opacity 0.2s ease-out';
-                void chessElement.offsetWidth; // 强制重排，让浏览器记录起始 opacity
+                void chessElement.offsetWidth;
                 chessElement.style.opacity = '0';
 
+                // 等待淡出完成后更新位置并淡入
                 setTimeout(() => {
-                    chessElement.style.opacity = '1';
+                    // 更新视觉位置
+                    if (this.gameInstance.chessPiece && this.gameInstance.chessPiece.animation) {
+                        this.gameInstance.chessPiece.animation.bringToFront(data.player, data.chessIndex);
+                        this.gameInstance.chessPiece.animation.updateChessPosition(data.player, data.chessIndex);
+                    }
+
+                    // 淡入
                     setTimeout(() => {
-                        chessElement.style.transition = '';
-                    }, 200);
+                        chessElement.style.opacity = '1';
+                        setTimeout(() => {
+                            chessElement.style.transition = '';
+                            // 淡入完成后清除高亮
+                            if (this.gameInstance.chessPiece) {
+                                this.gameInstance.chessPiece.clearTeleportHighlights();
+                            }
+                        }, 200);
+                    }, 50);
                 }, 200);
             }
         }
@@ -2230,7 +2303,13 @@ class MultiplayerGameManager {
                     }
                 }
             } else {
-                // 正常移动
+                // 正常移动：先用发送方的起始位置覆盖本地位置，确保动画与发送方一致
+                const chess = this.gameInstance.chessPiece.gameState.playerChess[data.player][data.chessIndex];
+                if (chess) {
+                    chess.position = data.fromPosition;
+                    chess.lastLandPos = this.gameInstance.chessPiece.generateUniqueLastLandPos(data.fromPosition);
+                    this.gameInstance.chessPiece.animation.updateChessPosition(data.player, data.chessIndex);
+                }
                 await this.gameInstance.chessPiece.animateChessMovement(data.player, data.chessIndex, data.diceValue);
             }
             
@@ -2902,8 +2981,23 @@ class MultiplayerGameManager {
             maxConsecutiveSixes: { ...gs.titleStats.maxConsecutiveSixes },
             firstFinishedPlayer: gs.titleStats.firstFinishedPlayer,
             bounceSteps: { ...gs.titleStats.bounceSteps },
+            // 道具模式称号数据
+            maxTeleportDistance: { ...gs.titleStats.maxTeleportDistance },
+            mysteryBoxMax: { ...gs.titleStats.mysteryBoxMax },
+            mysteryBoxMin: { ...gs.titleStats.mysteryBoxMin },
+            polyhedralMax: { ...gs.titleStats.polyhedralMax },
+            polyhedralMin: { ...gs.titleStats.polyhedralMin },
+            skillUseCount: { ...gs.titleStats.skillUseCount },
             // 总前进距离
             totalDistance: { ...gs.totalDistance },
+            // 道具统计数据（结算面板显示）
+            totalEnergyGained: { ...gs.totalEnergyGained },
+            skillUsage: gs.skillUsage ? {
+                1: { ...gs.skillUsage[1] },
+                2: { ...gs.skillUsage[2] },
+                3: { ...gs.skillUsage[3] },
+                4: { ...gs.skillUsage[4] }
+            } : undefined,
             // 骰子统计
             diceStatistics: gs.diceStatistics ? {
                 1: { ...gs.diceStatistics[1] },
@@ -2933,6 +3027,14 @@ class MultiplayerGameManager {
         if (titleStats.maxConsecutiveSixes) gs.titleStats.maxConsecutiveSixes = titleStats.maxConsecutiveSixes;
         if (titleStats.firstFinishedPlayer !== undefined) gs.titleStats.firstFinishedPlayer = titleStats.firstFinishedPlayer;
         if (titleStats.bounceSteps) gs.titleStats.bounceSteps = titleStats.bounceSteps;
+        if (titleStats.maxTeleportDistance) gs.titleStats.maxTeleportDistance = titleStats.maxTeleportDistance;
+        if (titleStats.mysteryBoxMax) gs.titleStats.mysteryBoxMax = titleStats.mysteryBoxMax;
+        if (titleStats.mysteryBoxMin) gs.titleStats.mysteryBoxMin = titleStats.mysteryBoxMin;
+        if (titleStats.polyhedralMax) gs.titleStats.polyhedralMax = titleStats.polyhedralMax;
+        if (titleStats.polyhedralMin) gs.titleStats.polyhedralMin = titleStats.polyhedralMin;
+        if (titleStats.skillUseCount) gs.titleStats.skillUseCount = titleStats.skillUseCount;
+        if (titleStats.totalEnergyGained) gs.totalEnergyGained = titleStats.totalEnergyGained;
+        if (titleStats.skillUsage) gs.skillUsage = titleStats.skillUsage;
         if (titleStats.totalDistance) gs.totalDistance = titleStats.totalDistance;
         if (titleStats.diceStatistics) gs.diceStatistics = titleStats.diceStatistics;
         if (titleStats.defeatCounts) gs.defeatCounts = titleStats.defeatCounts;
@@ -3276,7 +3378,7 @@ class MultiplayerGameManager {
      * 处理三次6惩罚同步
      */
     async handleThreeSixesPenalty(data) {
-        console.log(`处理三次6惩罚同步: 玩家${data.player}连续掷出3次6，所有棋子返回起点`);
+        console.log(`处理三次6惩罚同步: 玩家${data.player}连续摇到3次6，所有棋子返回起点`);
 
         // 立即设置三次6惩罚标志，防止AI继续操作
         if (window.gameState) {
@@ -3421,10 +3523,21 @@ class MultiplayerGameManager {
                 if (data.titleStats) {
                     this._applyTitleStats(data.titleStats);
                     if (window.gameState) {
-                        window.gameState.titleStats = data.titleStats;
-                        if (data.titleStats.totalDistance) window.gameState.totalDistance = data.titleStats.totalDistance;
-                        if (data.titleStats.diceStatistics) window.gameState.diceStatistics = data.titleStats.diceStatistics;
-                        if (data.titleStats.defeatCounts) window.gameState.defeatCounts = data.titleStats.defeatCounts;
+                        const ts = data.titleStats;
+                        window.gameState.titleStats = ts;
+                        // titleStats 子字段
+                        if (ts.maxTeleportDistance) window.gameState.titleStats.maxTeleportDistance = ts.maxTeleportDistance;
+                        if (ts.mysteryBoxMax) window.gameState.titleStats.mysteryBoxMax = ts.mysteryBoxMax;
+                        if (ts.mysteryBoxMin) window.gameState.titleStats.mysteryBoxMin = ts.mysteryBoxMin;
+                        if (ts.polyhedralMax) window.gameState.titleStats.polyhedralMax = ts.polyhedralMax;
+                        if (ts.polyhedralMin) window.gameState.titleStats.polyhedralMin = ts.polyhedralMin;
+                        if (ts.skillUseCount) window.gameState.titleStats.skillUseCount = ts.skillUseCount;
+                        // 其他统计
+                        if (ts.totalDistance) window.gameState.totalDistance = ts.totalDistance;
+                        if (ts.totalEnergyGained) window.gameState.totalEnergyGained = ts.totalEnergyGained;
+                        if (ts.skillUsage) window.gameState.skillUsage = ts.skillUsage;
+                        if (ts.diceStatistics) window.gameState.diceStatistics = ts.diceStatistics;
+                        if (ts.defeatCounts) window.gameState.defeatCounts = ts.defeatCounts;
                     }
                 }
             } catch (e) {
@@ -3545,10 +3658,19 @@ class MultiplayerGameManager {
                 if (data.titleStats) {
                     this._applyTitleStats(data.titleStats);
                     if (window.gameState) {
-                        window.gameState.titleStats = data.titleStats;
-                        if (data.titleStats.totalDistance) window.gameState.totalDistance = data.titleStats.totalDistance;
-                        if (data.titleStats.diceStatistics) window.gameState.diceStatistics = data.titleStats.diceStatistics;
-                        if (data.titleStats.defeatCounts) window.gameState.defeatCounts = data.titleStats.defeatCounts;
+                        const ts = data.titleStats;
+                        window.gameState.titleStats = ts;
+                        if (ts.maxTeleportDistance) window.gameState.titleStats.maxTeleportDistance = ts.maxTeleportDistance;
+                        if (ts.mysteryBoxMax) window.gameState.titleStats.mysteryBoxMax = ts.mysteryBoxMax;
+                        if (ts.mysteryBoxMin) window.gameState.titleStats.mysteryBoxMin = ts.mysteryBoxMin;
+                        if (ts.polyhedralMax) window.gameState.titleStats.polyhedralMax = ts.polyhedralMax;
+                        if (ts.polyhedralMin) window.gameState.titleStats.polyhedralMin = ts.polyhedralMin;
+                        if (ts.skillUseCount) window.gameState.titleStats.skillUseCount = ts.skillUseCount;
+                        if (ts.totalDistance) window.gameState.totalDistance = ts.totalDistance;
+                        if (ts.totalEnergyGained) window.gameState.totalEnergyGained = ts.totalEnergyGained;
+                        if (ts.skillUsage) window.gameState.skillUsage = ts.skillUsage;
+                        if (ts.diceStatistics) window.gameState.diceStatistics = ts.diceStatistics;
+                        if (ts.defeatCounts) window.gameState.defeatCounts = ts.defeatCounts;
                     }
                 }
             } catch (e) {
@@ -3785,6 +3907,13 @@ class MultiplayerGameManager {
      */
     handleError(data) {
         console.error('游戏错误:', data.message);
+
+        // 结算弹框显示期间，游戏会话可能被清理，不打扰用户
+        const settlementModal = document.getElementById('settlement-modal');
+        if (settlementModal && settlementModal.classList.contains('show')) {
+            return;
+        }
+
         this.showError(data.message);
     }
 

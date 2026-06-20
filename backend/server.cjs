@@ -2486,6 +2486,22 @@ const handleRemoveAIPlayer = withRoomValidation((ws, playerId, message, room) =>
   if (aiIndex === -1) throw new Error('AI玩家不存在');
 
   room.settings.aiPlayers.splice(aiIndex, 1);
+
+  // 重新编号剩余 AI 玩家的昵称
+  const remainingAI = room.settings.aiPlayers;
+  const easyBots = remainingAI.filter(ai => ai.difficulty === 'easy').sort((a, b) => a.color - b.color);
+  const hardBots = remainingAI.filter(ai => ai.difficulty === 'hard').sort((a, b) => a.color - b.color);
+
+  remainingAI.forEach(ai => {
+    if (ai.difficulty === 'hard') {
+      const indexInHard = hardBots.indexOf(ai) + 1;
+      ai.nickname = `AI-${indexInHard}`;
+    } else {
+      const indexInEasy = easyBots.indexOf(ai) + 1;
+      ai.nickname = `Bot-${indexInEasy}`;
+    }
+  });
+
   // 广播AI移除
   room.broadcast({ type: 'aiPlayerRemoved', colorIndex, room: room.toJSON() });
 }, true);
@@ -3301,21 +3317,6 @@ function handleAITakeoverChange(ws, playerId, message) {
     reason: message.reason,
     timestamp: message.timestamp
   });
-
-  // 冗余消息清理：如果是因为思考超时自动开启的托管，广播一条统一格式的系统消息
-  if (message.isActive && message.auto && message.reason === 'thinking_timeout') {
-    const player = target.players?.get(targetPlayerId);
-    if (player) {
-      target.broadcast({
-        type: 'chatMessage',
-        message: `${player.nickname} 思考时间到，开启AI托管`,
-        playerNumber: null,
-        playerName: null,
-        isSystemMessage: true,
-        timestamp: Date.now()
-      });
-    }
-  }
 }
 
 // 昵称切换（使用通用广播目标）
@@ -3339,7 +3340,7 @@ function handleNicknameChange(ws, playerId, message) {
 
 // 棋子移动（游戏内）
 const handleChessMove = withGameSessionValidation((ws, playerId, message, gameSession) => {
-  const { player, chessIndex, position, fromPosition, moveType, timestamp } = message;
+  const { player, chessIndex, position, fromPosition, toPosition, moveType, timestamp } = message;
   // 更新棋子状态
   if (gameSession.gameData.playerChess[player]?.[chessIndex]) {
     gameSession.gameData.playerChess[player][chessIndex].position = position;
@@ -3356,7 +3357,8 @@ const handleChessMove = withGameSessionValidation((ws, playerId, message, gameSe
     player,
     chessIndex,
     position,
-    fromPosition: fromPosition || undefined,
+    fromPosition: fromPosition !== undefined ? fromPosition : undefined,
+    toPosition: toPosition !== undefined ? toPosition : undefined,
     moveType: moveType || undefined,
     gameSessionId: gameSession.gameSessionId,
     timestamp

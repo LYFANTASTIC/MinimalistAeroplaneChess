@@ -6,6 +6,13 @@ import { playerNameManager } from './playerNameManager.js';
 import { activePlayerManager } from './activePlayerManager.js';
 import { reconnectManager } from './reconnectManager.js';
 import { titleManager } from './titleManager.js';
+import { aiTakeoverManager } from './aiTakeoverManager.js';
+
+function getDisplayName(player) {
+    const cleanName = aiTakeoverManager?.originalNames?.[player];
+    if (cleanName) return cleanName;
+    return playerNameManager.getPlayerName(player) || `玩家${player}`;
+}
 
 class SettlementModal {
     constructor() {
@@ -202,6 +209,12 @@ class SettlementModal {
         this.modal.classList.remove('show');
         document.body.style.overflow = '';
 
+        // 清除称号轮播定时器
+        if (this._carouselTimer) {
+            clearInterval(this._carouselTimer);
+            this._carouselTimer = null;
+        }
+
         // 重置视图为战绩
         this.currentView = 'rankings';
         this.updateViewDisplay();
@@ -266,6 +279,9 @@ class SettlementModal {
         // 渲染反弹格数统计
         html += this.renderBounceStatistics();
 
+        // 渲染道具模式统计
+        html += this.renderSkillStatistics();
+
         // 渲染骰子投掷统计表格
         html += this.renderDiceStatistics();
 
@@ -276,41 +292,6 @@ class SettlementModal {
             this.drawProgressChart();
             this.adjustTableHeaderFontSize();
         }, 0);
-    }
-
-    /**
-     * 动态调整表头文字大小，优先保证换行显示而非缩小到看不清
-     */
-    adjustTableHeaderFontSize() {
-        const table = this.dataAnalysisContainer.querySelector('.dice-stats-table');
-        if (!table) return;
-
-        const headers = table.querySelectorAll('thead th.player-header');
-        headers.forEach(th => {
-            const padding = 8; // 左右内边距之和
-            const containerWidth = th.getBoundingClientRect().width - padding;
-            
-            // 创建一个临时元素来测量文字宽度
-            const span = document.createElement('span');
-            span.style.visibility = 'hidden';
-            span.style.position = 'absolute';
-            span.style.whiteSpace = 'nowrap';
-            span.style.fontFamily = getComputedStyle(th).fontFamily;
-            span.style.fontWeight = getComputedStyle(th).fontWeight;
-            span.textContent = th.textContent;
-            document.body.appendChild(span);
-
-            let fontSize = 16; // 初始尝试的最大字体
-            span.style.fontSize = fontSize + 'px';
-            // 且最小缩小到 12px，剩余的长度通过 CSS 的换行来解决。
-            while (span.offsetWidth > containerWidth * 1.1 && fontSize > 12) {
-                fontSize -= 0.5;
-                span.style.fontSize = fontSize + 'px';
-            }
-
-            th.style.fontSize = fontSize + 'px';
-            document.body.removeChild(span);
-        });
     }
 
     /**
@@ -434,7 +415,7 @@ class SettlementModal {
         const legendX = padding.left + 10;
         const legendY = padding.top + 10;
         activePlayers.forEach((player, index) => {
-            const playerName = playerNameManager.getPlayerName(player);
+            const playerName = getDisplayName(player);
             const y = legendY + index * 20;
 
             // 绘制线条
@@ -474,7 +455,7 @@ class SettlementModal {
         html += '<thead><tr>';
         html += '<th class="dice-header">点数</th>';
         activePlayers.forEach(player => {
-            const playerName = playerNameManager.getPlayerName(player);
+            const playerName = getDisplayName(player);
             html += `<th class="player-header player-${player}">${playerName}</th>`;
         });
         html += '</tr></thead>';
@@ -539,7 +520,7 @@ class SettlementModal {
         const distances = activePlayers.map(player => ({
             player,
             distance: this.gameState.getTotalDistance(player),
-            playerName: playerNameManager.getPlayerName(player)
+            playerName: getDisplayName(player)
         }));
 
         // 按移动步数从大到小排序
@@ -549,7 +530,7 @@ class SettlementModal {
         const maxDistance = Math.max(...distances.map(d => d.distance), 1); // 至少为1避免除零
 
         let html = '<div class="distance-stats-section">';
-        html += '<h4 class="chart-title">前进总格数统计</h4>';
+        html += '<h4 class="chart-title">前进格数统计</h4>';
         html += '<div class="distance-bars-container">';
 
         distances.forEach(item => {
@@ -583,7 +564,7 @@ class SettlementModal {
         const bounces = activePlayers.map(player => ({
             player,
             steps: this.gameState.titleStats.bounceSteps[player] || 0,
-            playerName: playerNameManager.getPlayerName(player)
+            playerName: getDisplayName(player)
         }));
 
         // 按反弹步数从大到小排序
@@ -614,6 +595,139 @@ class SettlementModal {
         html += '</div>';
         html += '</div>';
 
+        return html;
+    }
+
+    /**
+     * 渲染道具模式统计数据（积分获取 + 各道具使用次数）
+     * 仅在道具模式下显示
+     */
+    renderSkillStatistics() {
+        // 从 window 或 gameInstance 获取 energyManager（观战模式 vs 游戏模式）
+        const energyMgr = window.energyManager || window.gameInstance?.energyManager;
+        if (!this.gameState || !energyMgr || !energyMgr.isSkillModeEnabled()) return '';
+
+        const activePlayers = activePlayerManager.getActivePlayers();
+        const gameState = this.gameState;
+
+        // 积分获取条形图
+        const energyItems = activePlayers.map(player => ({
+            player,
+            value: Math.floor(gameState.totalEnergyGained[player] || 0),
+            playerName: getDisplayName(player)
+        }));
+        energyItems.sort((a, b) => b.value - a.value);
+        const maxEnergy = Math.max(...energyItems.map(e => e.value), 1);
+
+        let html = '<div class="distance-stats-section skill-stats-section">';
+
+        // -- 积分获取 --
+        html += '<h4 class="chart-title">积分获取统计</h4>';
+        html += '<div class="distance-bars-container">';
+        energyItems.forEach(item => {
+            const percentage = (item.value / maxEnergy) * 100;
+            html += `
+                <div class="distance-bar-item">
+                    <div class="distance-player-info">
+                        <span class="distance-player-name player-${item.player}">${item.playerName}</span>
+                        <span class="distance-value">${item.value} <small>分</small></span>
+                    </div>
+                    <div class="distance-bar-bg">
+                        <div class="distance-bar-fill player-${item.player}" style="width: ${percentage}%"></div>
+                    </div>
+                </div>
+            `;
+        });
+        html += '</div>';
+
+        // -- 各道具使用次数（转置表格，参考骰子统计表格样式）--
+        // 从DOM中获取道具SVG图标
+        const skillIcons = {};
+        ['remote-dice', 'teleport', 'polyhedral-dice', 'mysteryBox'].forEach(skillId => {
+            const el = document.querySelector(`.skill-item[data-skill="${skillId}"] .skill-icon-container`);
+            if (el) {
+                const svg = el.querySelector('svg');
+                if (svg) {
+                    // 克隆避免影响原始DOM，转成HTML字符串
+                    skillIcons[skillId] = svg.cloneNode(true).outerHTML;
+                }
+            }
+        });
+
+        const skillNames = [
+            { key: 'remoteDice', skillId: 'remote-dice' },
+            { key: 'teleport', skillId: 'teleport' },
+            { key: 'polyhedralDice', skillId: 'polyhedral-dice' },
+            { key: 'mysteryBox', skillId: 'mysteryBox' }
+        ];
+
+        html += '<h4 class="chart-title">道具使用统计</h4>';
+        html += '<table class="dice-stats-table">';
+
+        // 表头：玩家列
+        html += '<thead><tr>';
+        html += '<th class="dice-header">道具</th>';
+        activePlayers.forEach(player => {
+            const playerName = getDisplayName(player);
+            html += `<th class="player-header player-${player}">${playerName}</th>`;
+        });
+        html += '</tr></thead>';
+
+        // 表体：每行一种道具
+        html += '<tbody>';
+        skillNames.forEach(skill => {
+            // 找出该道具使用最多的玩家
+            let maxCount = 0;
+            const playerCounts = {};
+            activePlayers.forEach(player => {
+                const count = (gameState.skillUsage[player]?.[skill.key] || 0);
+                playerCounts[player] = count;
+                if (count > maxCount) maxCount = count;
+            });
+            const maxCountPlayers = activePlayers.filter(p => playerCounts[p] === maxCount);
+            const shouldHighlight = maxCountPlayers.length === 1 && maxCount > 0;
+
+            const iconHtml = skillIcons[skill.skillId] || '';
+            html += '<tr>';
+            html += `<td class="dice-cell skill-icon-cell">${iconHtml}</td>`;
+            activePlayers.forEach(player => {
+                const count = playerCounts[player];
+                const highlightClass = shouldHighlight && count === maxCount ? ' highlight' : '';
+                html += `<td class="player-cell player-${player}${highlightClass}">
+                    <span class="count">${count}</span>
+                </td>`;
+            });
+            html += '</tr>';
+        });
+
+        // 合计行
+        // 先计算所有玩家的合计，找出最大者
+        const playerTotals = {};
+        let maxTotal = 0;
+        activePlayers.forEach(player => {
+            const usage = gameState.skillUsage[player] || {};
+            const total = (usage.remoteDice || 0) + (usage.teleport || 0)
+                + (usage.polyhedralDice || 0) + (usage.mysteryBox || 0);
+            playerTotals[player] = total;
+            if (total > maxTotal) maxTotal = total;
+        });
+        const maxTotalPlayers = activePlayers.filter(p => playerTotals[p] === maxTotal);
+        const shouldHighlightTotal = maxTotalPlayers.length === 1 && maxTotal > 0;
+
+        html += '<tr>';
+        html += '<td class="dice-cell" style="font-weight:bold;font-size:13px">合计</td>';
+        activePlayers.forEach(player => {
+            const total = playerTotals[player];
+            const highlightClass = shouldHighlightTotal && total === maxTotal ? ' highlight' : '';
+            html += `<td class="player-cell player-${player}${highlightClass}">
+                <span class="count">${total}</span>
+            </td>`;
+        });
+        html += '</tr>';
+
+        html += '</tbody></table>';
+
+        html += '</div>';
         return html;
     }
 
@@ -708,12 +822,43 @@ class SettlementModal {
     renderRankings(rankingsData) {
         if (!this.rankingsContainer) return;
 
+        // 清除旧的轮播定时器
+        if (this._carouselTimer) {
+            clearInterval(this._carouselTimer);
+            this._carouselTimer = null;
+        }
+        this._carouselItems = [];
+
         this.rankingsContainer.innerHTML = '';
 
         rankingsData.forEach((data, index) => {
             const rankingItem = this.createRankingItem(data, index + 1);
             this.rankingsContainer.appendChild(rankingItem);
         });
+
+        // 所有卡片创建完后，启动共享轮播
+        if (this._carouselItems.length > 0) {
+            const playerCount = rankingsData.length;
+            // 等待所有卡片翻转完成后启动（最晚一张翻转 + 缓冲）
+            const flipEnd = 600 + (playerCount - 1) * 400 + 300;
+            setTimeout(() => {
+                this._carouselTimer = setInterval(() => {
+                    // 所有卡片同时淡出
+                    this._carouselItems.forEach(item => {
+                        item.titleContent.style.opacity = '0';
+                    });
+                    setTimeout(() => {
+                        this._carouselItems.forEach(item => {
+                            item.index = (item.index + 1) % item.titles.length;
+                            item.titleBadge.textContent = item.titles[item.index]?.name || '平凡棋手';
+                            item.titleDesc.textContent = item.titles[item.index]?.desc || '';
+                            item.ribbon.textContent = `${item.index + 1}/${item.titles.length}`;
+                            item.titleContent.style.opacity = '1';
+                        });
+                    }, 200);
+                }, 2500);
+            }, flipEnd);
+        }
     }
 
     /**
@@ -758,7 +903,7 @@ class SettlementModal {
         name.className = `ranking-name player-${data.player}-name`;
         let playerName = `Player ${data.player}`;
         if (playerNameManager) {
-            playerName = playerNameManager.getPlayerName(data.player);
+            playerName = getDisplayName(data.player);
         }
         name.textContent = playerName;
         const progress = document.createElement('div');
@@ -788,16 +933,32 @@ class SettlementModal {
         const cardBack = document.createElement('div');
         cardBack.className = `flip-card-back player-${data.player}-stats-bg`;
 
+        // 处理称号数组（向后兼容：单个对象也转为数组）
+        const titles = Array.isArray(data.title) ? data.title : [data.title];
+        const titleContent = document.createElement('div');
+        titleContent.className = 'ranking-title-content';
+        titleContent.style.opacity = '1';
+
         const titleBadge = document.createElement('div');
         titleBadge.className = `ranking-title-badge player-${data.player}-name`;
-        titleBadge.textContent = data.title?.name || '平凡棋手';
+        titleBadge.textContent = titles[0]?.name || '平凡棋手';
 
         const titleDesc = document.createElement('div');
         titleDesc.className = 'ranking-title-desc';
-        titleDesc.textContent = data.title?.desc || '平平淡淡才是真';
+        titleDesc.textContent = titles[0]?.desc || '平平淡淡才是真';
 
-        cardBack.appendChild(titleBadge);
-        cardBack.appendChild(titleDesc);
+        titleContent.appendChild(titleBadge);
+        titleContent.appendChild(titleDesc);
+        cardBack.appendChild(titleContent);
+
+        // 右下角斜角计数带（仅多称号时显示）
+        let ribbon = null;
+        if (titles.length > 1) {
+            ribbon = document.createElement('div');
+            ribbon.className = `title-counter-ribbon player-${data.player}-ribbon`;
+            ribbon.textContent = `1/${titles.length}`;
+            cardBack.appendChild(ribbon);
+        }
 
         // 组装卡片
         cardInner.appendChild(cardFront);
@@ -808,6 +969,13 @@ class SettlementModal {
         item.addEventListener('click', () => {
             item.classList.toggle('is-flipped');
         });
+
+        // 设置称号轮播：翻转动画后开始循环切换所有称号
+        if (titles.length > 1) {
+            const carouselData = { titleContent, titleBadge, titleDesc, ribbon, titles, index: 0 };
+            if (!this._carouselItems) this._carouselItems = [];
+            this._carouselItems.push(carouselData);
+        }
 
         return item;
     }

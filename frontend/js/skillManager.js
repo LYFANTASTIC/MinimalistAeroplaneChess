@@ -275,6 +275,20 @@ class SkillManager {
 
         console.log(`玩家${player}使用道具: ${skillId}`);
 
+        // 记录道具使用次数（用于称号统计）
+        if (gameState.titleStats.skillUseCount[player] !== undefined) {
+            gameState.titleStats.skillUseCount[player]++;
+        }
+
+        // 记录分道具使用次数（用于结算面板统计）
+        if (gameState.skillUsage && gameState.skillUsage[player]) {
+            const skillMap = { 'remote-dice': 'remoteDice', 'teleport': 'teleport', 'polyhedral-dice': 'polyhedralDice', 'mysteryBox': 'mysteryBox' };
+            const skillKey = skillMap[skillId];
+            if (skillKey && gameState.skillUsage[player][skillKey] !== undefined) {
+                gameState.skillUsage[player][skillKey]++;
+            }
+        }
+
         // 播放道具音效
         if (audioManager) {
             audioManager.playSkillSound();
@@ -476,10 +490,6 @@ class SkillManager {
      */
     activateTeleport(player) {
         console.log(`玩家${player}激活传送门道具`);
-
-        // 记录传送门使用信息（包括AI），确保gameInfo中有完整轨迹
-        this.sendSkillUsageInfo(player, '传送门');
-
         // 在骰子位置显示传送门图标
         this.showTeleportIcon();
 
@@ -519,6 +529,14 @@ class SkillManager {
         const diceValue = Math.floor(Math.random() * 12) + 1;
         console.log(`多面骰子生成点数: ${diceValue}`);
 
+        // 记录多面骰子结果（用于称号统计）
+        if (diceValue > gameState.titleStats.polyhedralMax[player]) {
+            gameState.titleStats.polyhedralMax[player] = diceValue;
+        }
+        if (diceValue < gameState.titleStats.polyhedralMin[player]) {
+            gameState.titleStats.polyhedralMin[player] = diceValue;
+        }
+
         // 发送游戏信息，同时携带骰子点数
         this.sendSkillUsageInfo(player, '多面骰子', { diceValue });
 
@@ -527,12 +545,12 @@ class SkillManager {
 
         // 仅当当前玩家不是由AI控制时，才显示提示文字
         if (!window.botController || !window.botController.isCurrentPlayerBot()) {
-            this.showNotification(`多面骰子掷出: ${diceValue} 点`);
+            this.showNotification(`多面骰子摇到: ${diceValue} 点`);
         }
 
         // 在线模式下同步多面骰子显示
         if (gameState.getIsOnlineMultiplayer() && window.gameInstance && window.gameInstance.multiplayerGameManager) {
-            window.gameInstance.multiplayerGameManager.syncPolyhedralDice(diceValue);
+            window.gameInstance.multiplayerGameManager.syncPolyhedralDice(diceValue, player);
         }
 
         // 设置游戏状态中的骰子值
@@ -563,6 +581,14 @@ class SkillManager {
         // 生成0-40的随机积分
         const energyGain = Math.floor(Math.random() * 41);
         console.log(`盲盒开启: ${energyGain}点积分`);
+
+        // 记录盲盒结果（用于称号统计）
+        if (energyGain > gameState.titleStats.mysteryBoxMax[player]) {
+            gameState.titleStats.mysteryBoxMax[player] = energyGain;
+        }
+        if (energyGain < gameState.titleStats.mysteryBoxMin[player]) {
+            gameState.titleStats.mysteryBoxMin[player] = energyGain;
+        }
 
         // 发送游戏信息 (包含获得的积分值)
         this.sendSkillUsageInfo(player, '盲盒', { amount: energyGain });
@@ -609,10 +635,11 @@ class SkillManager {
         console.log(`玩家${player}使用盲盒后跳过回合`);
 
         // 切换到下一个玩家
+        // 不传入 triggerBot，避免在 bot 处理期间（isProcessing=true）误触发被跳过
+        // bot 使用盲盒时由 botController 在异步等待完成后自行触发
         if (window.gameInstance && window.gameInstance.uiUpdater) {
             const handleThinkingTimeout = window.gameInstance.dice?.handleThinkingTimeoutWrapper?.bind(window.gameInstance.dice);
-            const triggerBot = window.eventHandler?.triggerBotOperationIfNeeded?.bind(window.eventHandler);
-            gameState.nextPlayer(window.gameInstance.uiUpdater, handleThinkingTimeout, triggerBot, true);
+            gameState.nextPlayer(window.gameInstance.uiUpdater, handleThinkingTimeout, null, true);
         } else {
             gameState.nextPlayer();
         }
@@ -626,38 +653,86 @@ class SkillManager {
         const diceDisplay = document.getElementById('diceDisplay');
         if (!diceDisplay) return;
 
-        // 隐藏原始骰子
         diceDisplay.style.display = 'none';
 
-        // 获取当前玩家
         const currentPlayer = gameState.getCurrentPlayer();
 
-        // 创建或更新多面骰子显示
         let polyhedralDice = document.getElementById('polyhedralDiceDisplay');
+        let reelStrip;
+        let viewport;
+
         if (!polyhedralDice) {
             polyhedralDice = document.createElement('div');
             polyhedralDice.id = 'polyhedralDiceDisplay';
             polyhedralDice.className = `polyhedral-dice-display player-${currentPlayer}-color`;
-            polyhedralDice.textContent = diceValue;
 
-            // 插入到骰子的父容器中
+            viewport = document.createElement('div');
+            viewport.className = 'reel-viewport';
+
+            reelStrip = document.createElement('div');
+            reelStrip.className = 'reel-strip';
+            for (let i = 0; i < 7; i++) {
+                for (let n = 1; n <= 12; n++) {
+                    const span = document.createElement('span');
+                    span.textContent = n;
+                    reelStrip.appendChild(span);
+                }
+            }
+            viewport.appendChild(reelStrip);
+            polyhedralDice.appendChild(viewport);
             diceDisplay.parentNode.insertBefore(polyhedralDice, diceDisplay);
         } else {
-            polyhedralDice.textContent = diceValue;
+            const existingNum = polyhedralDice.querySelector('.final-number');
+            if (existingNum) existingNum.remove();
+            viewport = polyhedralDice.querySelector('.reel-viewport');
+            reelStrip = viewport ? viewport.querySelector('.reel-strip') : null;
+            if (reelStrip) {
+                reelStrip.style.display = '';
+                reelStrip.style.transition = 'none';
+            }
             polyhedralDice.className = `polyhedral-dice-display player-${currentPlayer}-color`;
-            polyhedralDice.style.display = 'flex';
         }
 
-        // 检查聊天输入框是否正在显示，如果是则临时隐藏但标记应该显示
+        if (!reelStrip) return;
+
+        // 动态读取实际数字高度和视口尺寸
+        const sampleSpan = reelStrip.querySelector('span');
+        const itemHeight = sampleSpan ? sampleSpan.offsetHeight : 44;
+        const viewportHeight = viewport ? viewport.offsetHeight : 50;
+        const centerOffset = (viewportHeight - itemHeight) / 2;
+
+        const targetIndex = 5 * 12 + (diceValue - 1);
+        const targetY = centerOffset - targetIndex * itemHeight;
+
+        const startIndex = Math.floor(Math.random() * 4) * 12;
+        const startY = centerOffset - startIndex * itemHeight;
+
+        reelStrip.style.transition = 'none';
+        reelStrip.style.transform = `translateY(${startY}px)`;
+        void reelStrip.offsetHeight;
+
+        // 一条曲线，快速 + 轻微过冲 + 自然归位
+        reelStrip.style.transition = 'transform 0.65s cubic-bezier(0.1, 0.75, 0.25, 1.05)';
+        reelStrip.style.transform = `translateY(${targetY}px)`;
+
+        // 动画完成后隐藏字带，显示最终数字
+        setTimeout(() => {
+            reelStrip.style.display = 'none';
+            if (!polyhedralDice.querySelector('.final-number')) {
+                const finalNum = document.createElement('span');
+                finalNum.className = 'final-number';
+                finalNum.textContent = diceValue;
+                viewport.appendChild(finalNum);
+            }
+        }, 1200);
+
         const chatInputArea = document.getElementById('chatInputArea');
         const isChatInputVisible = chatInputArea && chatInputArea.style.display === 'flex';
         if (isChatInputVisible) {
             polyhedralDice.style.display = 'none';
             polyhedralDice.dataset.shouldShow = 'true';
-            console.log('[多面骰子] 聊天输入框正在显示，多面骰子已创建但暂时隐藏');
         } else {
-            polyhedralDice.style.display = 'flex';
-            console.log('[多面骰子] 骰子已隐藏，多面骰子已显示');
+            polyhedralDice.style.display = 'block';
         }
     }
 

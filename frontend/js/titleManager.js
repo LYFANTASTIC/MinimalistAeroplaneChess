@@ -14,8 +14,15 @@ class TitleManager {
                 UNLUCKY_START: { id: 'unlucky_takeoff', name: '非酋', desc: '连着三回合无法起飞' },
                 LUCKY_KING: { id: 'lucky_king', name: '欧皇', desc: '连投三次 6' },
                 INVISIBLE: { id: 'invisible', name: '不死传说', desc: '整局未被击败过' },
+                PEACE_MAKER: { id: 'peace_maker', name: '和平使者', desc: '未击败任何对手' },
                 TAILWIND_WALKER: { id: 'tailwind_walker', name: '顺风行者', desc: '在整局未发生过反弹的情况下获胜' },
-                BOUNCE_KING: { id: 'wind_walker', name: '逆风行者', desc: '反弹总格数超过 50 格' }
+                BOUNCE_KING: { id: 'wind_walker', name: '逆风行者', desc: '反弹总格数超过 50 格' },
+                DIMENSION_TRAVELER: { id: 'dimension_traveler', name: '次元旅人', desc: '单次传送超过 20 格' },
+                Koi_FISH: { id: 'koi_fish', name: '锦鲤附体', desc: '盲盒开出超过 35 点积分' },
+                PHILANTHROPIST: { id: 'philanthropist', name: '慈善家', desc: '盲盒开出 0 点积分' },
+                DESTINY_CHILD: { id: 'destiny_child', name: '天命之子', desc: '多面骰子摇到 12 点' },
+                UNLUCKY_BEAR: { id: 'unlucky_bear', name: '倒霉熊', desc: '多面骰子摇到 1 点' },
+                SKILL_MASTER: { id: 'skill_master', name: '道具大师', desc: '使用道具次数超过 10 次' }
             },
             // 唯一称号 (优先级 2)
             UNIQUE: {
@@ -49,10 +56,138 @@ class TitleManager {
 
         // 为每个玩家确定称号
         activePlayers.forEach(player => {
-            playerTitles[player] = this._determinePlayerTitle(player, gameState, stats, rankings, uniqueWinners);
+            playerTitles[player] = this._collectPlayerTitles(player, gameState, stats, rankings, uniqueWinners);
         });
 
         return playerTitles;
+    }
+
+    /**
+     * 收集玩家所有符合条件的称号（不再只取最高优先级的一个）
+     * @returns {Array} 称号对象数组
+     */
+    _collectPlayerTitles(player, gameState, stats, rankings, uniqueWinners) {
+        const titleStats = gameState.titleStats;
+        const ranking = rankings.find(r => r.player === player);
+        const titles = [];
+
+        // --- 1. 概率称号 ---
+
+        // 反向欧皇：连着三回合 1 点
+        if (titleStats.consecutiveOnes[player] >= 3) {
+            titles.push(this.TITLES.PROBABILITY.REVERSE_LUCKY);
+        }
+
+        // 非酋：连着三回合无法起飞
+        if (titleStats.consecutiveNoTakeoff[player] >= 3) {
+            titles.push(this.TITLES.PROBABILITY.UNLUCKY_START);
+        }
+
+        // 欧皇：连投三次 6
+        if (titleStats.maxConsecutiveSixes[player] >= 3) {
+            titles.push(this.TITLES.PROBABILITY.LUCKY_KING);
+        }
+
+        // 不死传说：正常结束游戏且整局未被击败过
+        if (stats.isNormalGameEnd && stats.beenDefeatedCounts[player] === 0) {
+            titles.push(this.TITLES.PROBABILITY.INVISIBLE);
+        }
+
+        // 和平使者：正常结束游戏且整局未击败过任何对手
+        if (stats.isNormalGameEnd && stats.defeatOthersCounts[player] === 0) {
+            titles.push(this.TITLES.PROBABILITY.PEACE_MAKER);
+        }
+
+        // 顺风行者：正常结束游戏，整局未发生过反弹且获胜
+        if (stats.isNormalGameEnd && titleStats.bounceSteps && titleStats.bounceSteps[player] === 0 && ranking && ranking.position === 1) {
+            titles.push(this.TITLES.PROBABILITY.TAILWIND_WALKER);
+        }
+
+        // 逆风行者：反弹格数超过 50 格
+        if (titleStats.bounceSteps && titleStats.bounceSteps[player] > 50) {
+            titles.push(this.TITLES.PROBABILITY.BOUNCE_KING);
+        }
+
+        // --- 道具模式称号 ---
+
+        // 次元旅人：单次传送超过 20 格
+        if (titleStats.maxTeleportDistance && titleStats.maxTeleportDistance[player] > 20) {
+            titles.push(this.TITLES.PROBABILITY.DIMENSION_TRAVELER);
+        }
+
+        // 锦鲤附体：盲盒开出超过 35 点积分
+        if (titleStats.mysteryBoxMax && titleStats.mysteryBoxMax[player] > 35) {
+            titles.push(this.TITLES.PROBABILITY.Koi_FISH);
+        }
+
+        // 慈善家：盲盒开出 0 点积分
+        if (titleStats.mysteryBoxMin && titleStats.mysteryBoxMin[player] === 0) {
+            titles.push(this.TITLES.PROBABILITY.PHILANTHROPIST);
+        }
+
+        // 天命之子：多面骰子摇到 12 点
+        if (titleStats.polyhedralMax && titleStats.polyhedralMax[player] >= 12) {
+            titles.push(this.TITLES.PROBABILITY.DESTINY_CHILD);
+        }
+
+        // 倒霉熊：多面骰子摇到 1 点
+        if (titleStats.polyhedralMin && titleStats.polyhedralMin[player] === 1) {
+            titles.push(this.TITLES.PROBABILITY.UNLUCKY_BEAR);
+        }
+
+        // 道具大师：使用道具次数超过 10 次
+        if (titleStats.skillUseCount && titleStats.skillUseCount[player] > 10) {
+            titles.push(this.TITLES.PROBABILITY.SKILL_MASTER);
+        }
+
+        // --- 2. 唯一称号 ---
+
+        // 最速传说 (首个完成)
+        if (uniqueWinners.speedLegend === player) {
+            titles.push(this.TITLES.UNIQUE.SPEED_LEGEND);
+        }
+
+        // 长跑冠军 (距离最多)
+        if (uniqueWinners.marathon === player && stats.totalDistances[player] > 0) {
+            titles.push(this.TITLES.UNIQUE.MARATHON);
+        }
+
+        // 收割者 (击败最多)
+        if (uniqueWinners.killer === player && stats.defeatOthersCounts[player] > 0) {
+            titles.push(this.TITLES.UNIQUE.KILLER);
+        }
+
+        // 六点狂魔 (6点最多)
+        if (uniqueWinners.sixMaster === player && stats.diceSixCounts[player] > 0) {
+            titles.push(this.TITLES.UNIQUE.SIX_MASTER);
+        }
+
+        // 回家常客 (被击败最多)
+        if (uniqueWinners.homeVisitor === player && stats.beenDefeatedCounts[player] > 0) {
+            titles.push(this.TITLES.UNIQUE.HOME_VISITOR);
+        }
+
+        // 避战大师 (被击败最少，且>0)
+        if (uniqueWinners.steadyDog === player && stats.beenDefeatedCounts[player] > 0) {
+            titles.push(this.TITLES.UNIQUE.STEADY_DOG);
+        }
+
+        // 逆风翻盘
+        if (uniqueWinners.comeback === player) {
+            titles.push(this.TITLES.UNIQUE.COMEBACK);
+        }
+
+        // 棋王 (第一名)
+        if (uniqueWinners.chessKing === player) {
+            titles.push(this.TITLES.UNIQUE.CHESS_KING);
+        }
+
+        // --- 3. 默认称号（无任何称号时兜底）---
+        if (titles.length === 0) {
+            titles.push(this.TITLES.DEFAULT);
+        }
+
+        return titles;
     }
 
     /**
@@ -200,92 +335,6 @@ class TitleManager {
         });
 
         return stats;
-    }
-
-    /**
-     * 为单个玩家确定优先级最高的称号
-     */
-    _determinePlayerTitle(player, gameState, stats, rankings, uniqueWinners) {
-        const titleStats = gameState.titleStats;
-        const ranking = rankings.find(r => r.player === player);
-
-        // --- 1. 概率称号 (最高优先级) ---
-
-        // 反向欧皇：连着三回合 1 点
-        if (titleStats.consecutiveOnes[player] >= 3) {
-            return this.TITLES.PROBABILITY.REVERSE_LUCKY;
-        }
-
-        // 非酋：连着三回合无法起飞
-        if (titleStats.consecutiveNoTakeoff[player] >= 3) {
-            return this.TITLES.PROBABILITY.UNLUCKY_START;
-        }
-
-        // 欧皇：连投三次 6
-        if (titleStats.maxConsecutiveSixes[player] >= 3) {
-            return this.TITLES.PROBABILITY.LUCKY_KING;
-        }
-
-        // 不死传说：正常结束游戏且整局未被击败过（强制结算时未完成全程，不授予）
-        if (stats.isNormalGameEnd && stats.beenDefeatedCounts[player] === 0) {
-            return this.TITLES.PROBABILITY.INVISIBLE;
-        }
-
-        // 顺风行者：正常结束游戏，整局未发生过反弹且获胜（强制结算时未完成全程，不授予）
-        if (stats.isNormalGameEnd && titleStats.bounceSteps && titleStats.bounceSteps[player] === 0 && ranking && ranking.position === 1) {
-            return this.TITLES.PROBABILITY.TAILWIND_WALKER;
-        }
-
-        // 逆风行者：反弹格数超过 50 格
-        if (titleStats.bounceSteps && titleStats.bounceSteps[player] > 50) {
-            return this.TITLES.PROBABILITY.BOUNCE_KING;
-        }
-
-        // --- 2. 唯一称号 ---
-        // 使用预计算的唯一称号得主表，平局时由 lowest player number 裁决，确保不重复
-
-        // 最速传说 (首个完成)
-        if (uniqueWinners.speedLegend === player) {
-            return this.TITLES.UNIQUE.SPEED_LEGEND;
-        }
-
-        // 长跑冠军 (距离最多)
-        if (uniqueWinners.marathon === player && stats.totalDistances[player] > 0) {
-            return this.TITLES.UNIQUE.MARATHON;
-        }
-
-        // 收割者 (击败最多)
-        if (uniqueWinners.killer === player && stats.defeatOthersCounts[player] > 0) {
-            return this.TITLES.UNIQUE.KILLER;
-        }
-
-        // 六点狂魔 (6点最多)
-        if (uniqueWinners.sixMaster === player && stats.diceSixCounts[player] > 0) {
-            return this.TITLES.UNIQUE.SIX_MASTER;
-        }
-
-        // 回家常客 (被击败最多)
-        if (uniqueWinners.homeVisitor === player && stats.beenDefeatedCounts[player] > 0) {
-            return this.TITLES.UNIQUE.HOME_VISITOR;
-        }
-
-        // 避战大师 (被击败最少，且>0)
-        if (uniqueWinners.steadyDog === player && stats.beenDefeatedCounts[player] > 0) {
-            return this.TITLES.UNIQUE.STEADY_DOG;
-        }
-
-        // 逆风翻盘
-        if (uniqueWinners.comeback === player) {
-            return this.TITLES.UNIQUE.COMEBACK;
-        }
-
-        // 棋王 (第一名)
-        if (uniqueWinners.chessKing === player) {
-            return this.TITLES.UNIQUE.CHESS_KING;
-        }
-
-        // --- 3. 默认称号 ---
-        return this.TITLES.DEFAULT;
     }
 
 }

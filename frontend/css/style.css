@@ -800,6 +800,9 @@ body {
     font-weight: bold;
     text-shadow: none;
     color: #2d241f;
+    word-break: break-word;
+    overflow-wrap: break-word;
+    max-width: 90px;
 }
 
 .player-1-avatar {
@@ -1264,14 +1267,12 @@ body {
 
 /* 多面骰子显示样式 */
 .polyhedral-dice-display {
-    display: flex;
-    align-items: center;
-    justify-content: center;
     position: relative;
     z-index: 3;
-    margin: 20px 0;
+    margin: 20px auto;
     height: 90px;
     width: 120px;
+    overflow: hidden;
     font-size: 40px;
     font-weight: bold;
     color: var(--ui-default-color);
@@ -1280,13 +1281,55 @@ body {
     pointer-events: none;
 }
 
+.polyhedral-dice-display .reel-viewport {
+    position: absolute;
+    left: 35px;
+    top: 20px;
+    width: 50px;
+    height: 50px;
+    overflow: hidden;
+}
+
+.polyhedral-dice-display .reel-strip {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    transition: transform 1s cubic-bezier(0.1, 0.7, 0.2, 1);
+    will-change: transform;
+}
+
+.polyhedral-dice-display .reel-strip span {
+    display: block;
+    height: 44px;
+    line-height: 44px;
+    text-align: center;
+    font-size: 40px;
+    width: 100%;
+}
+
+.polyhedral-dice-display .final-number {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 40px;
+}
+
 .polyhedral-dice-display::before {
     content: "";
     position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
     width: 50px;
     height: 50px;
     border: 4px solid currentColor;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
     z-index: -1;
 }
 
@@ -1841,6 +1884,11 @@ body {
 
 .chess-teleport-fade {
     transition: opacity 0.2s ease-out;
+}
+
+/* 传送门：源格子和目标格子高亮 */
+.teleport-grid-highlight {
+    color: var(--bg-light-1) !important;
 }
 
 .no-transition {
@@ -3714,6 +3762,39 @@ use[href="#checkmark"] {
     opacity: 0.8;
 }
 
+.ranking-title-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    transition: opacity 0.2s ease-in;
+}
+
+/* 右下角斜角计数带 */
+.title-counter-ribbon {
+    position: absolute;
+    bottom: 10px;
+    right: 5px;
+    width: 50px;
+    height: 20px;
+    transform: rotate(-20deg);
+    transform-origin: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: bold;
+    color: var(--font-faint);
+    border-radius: 3px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+    pointer-events: none;
+}
+
+.title-counter-ribbon.player-1-ribbon { background: var(--player-1-fill); }
+.title-counter-ribbon.player-2-ribbon { background: var(--player-2-fill); }
+.title-counter-ribbon.player-3-ribbon { background: var(--player-3-fill); }
+.title-counter-ribbon.player-4-ribbon { background: var(--player-4-fill); }
+
 .ranking-position {
     width: 30px;
     height: 30px;
@@ -3899,7 +3980,7 @@ use[href="#checkmark"] {
 .dice-stats-section {
     background: rgba(255, 255, 255, 0.03);
     border-radius: 10px;
-    padding: 10px 5px;
+    padding: 10px 10px;
 }
 
 .dice-stats-table {
@@ -3913,12 +3994,11 @@ use[href="#checkmark"] {
 
 .dice-stats-table thead th {
     padding: 8px 4px;
-    font-size: 10px;
+    font-size: 13px;
     font-weight: bold;
     text-align: center;
     background: rgba(255, 255, 255, 0.03);
     border: 2px solid var(--border-light);
-    border-bottom: 2px solid var(--border-medium);
 }
 
 .dice-stats-table .dice-header {
@@ -3972,6 +4052,20 @@ use[href="#checkmark"] {
 .dice-stats-table .dice-cell {
     font-size: 32px;
     text-shadow: none;
+}
+
+.skill-icon-cell {
+    padding: 2px !important;
+    line-height: 0;
+    vertical-align: middle;
+}
+
+.skill-icon-cell svg {
+    display: inline-block;
+    width: 24px;
+    height: 24px;
+    color: var(--font-faint);
+    vertical-align: middle;
 }
 
 .dice-stats-table .player-cell {
@@ -4111,6 +4205,18 @@ use[href="#checkmark"] {
 
 .distance-player-name.player-4 {
     color: var(--player-4-border);
+}
+
+.skill-stats-section {
+    margin-bottom: 15px;
+    padding: 0 10px;
+}
+
+.skill-stats-subtitle {
+    margin: 12px 0 8px;
+    font-size: 13px;
+    color: var(--font-faint);
+    font-weight: bold;
 }
 
 .no-data {
@@ -5920,9 +6026,23 @@ use[href="#checkmark"] {
     .polyhedral-dice-display{
         font-size: 34px;
     }
+    .polyhedral-dice-display .reel-strip span,
+    .polyhedral-dice-display .final-number {
+        font-size: 34px;
+    }
+    .polyhedral-dice-display .reel-strip span {
+        height: 40px;
+        line-height: 40px;
+    }
     .polyhedral-dice-display::before {
         width: 45px;
         height: 45px;
+    }
+    .polyhedral-dice-display .reel-viewport {
+        width: 45px;
+        height: 45px;
+        left: 37px;
+        top: 22px;
     }
     #board-svg {
         width: min(500px, 90vw);
@@ -6077,9 +6197,6 @@ use[href="#checkmark"] {
     .control-title .game-room-code-display {
         display: none !important;
     }
-    .game-control-content > .debug-section {
-        display: none;
-    }
 }
 
 /* 小型平板优化 (480px - 1000px) - 防止user-info和棋盘重叠 */
@@ -6129,6 +6246,7 @@ use[href="#checkmark"] {
     }
 
     .player-name {
+        max-width: 80px;
         font-size: 12px;
     }
 
@@ -6179,9 +6297,26 @@ use[href="#checkmark"] {
         margin: 18px 0;
     }
 
+    .polyhedral-dice-display .reel-strip span,
+    .polyhedral-dice-display .final-number {
+        font-size: 30px;
+    }
+
+    .polyhedral-dice-display .reel-strip span {
+        height: 37px;
+        line-height: 37px;
+    }
+
     .polyhedral-dice-display::before {
         width: 42px;
         height: 42px;
+    }
+
+    .polyhedral-dice-display .reel-viewport {
+        width: 42px;
+        height: 42px;
+        left: 29px;
+        top: 19px;
     }
 
     /* 调整传送门和盲盒图标 */
@@ -6429,6 +6564,7 @@ use[href="#checkmark"] {
     }
 
     .player-name {
+        max-width: 80px;
         font-size: 12px;
     }
 
@@ -6459,9 +6595,26 @@ use[href="#checkmark"] {
         margin: 15px 0;
     }
 
+    .polyhedral-dice-display .reel-strip span,
+    .polyhedral-dice-display .final-number {
+        font-size: 28px;
+    }
+
+    .polyhedral-dice-display .reel-strip span {
+        height: 30px;
+        line-height: 30px;
+    }
+
     .polyhedral-dice-display::before {
         width: 35px;
         height: 35px;
+    }
+
+    .polyhedral-dice-display .reel-viewport {
+        width: 35px;
+        height: 35px;
+        left: 33px;
+        top: 20px;
     }
 
     /* 移动端传送门和盲盒图标 */

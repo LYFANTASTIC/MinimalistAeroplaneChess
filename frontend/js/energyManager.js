@@ -114,7 +114,13 @@ class EnergyManager {
         const oldEnergy = this.playerEnergy[player];
         this.playerEnergy[player] = Math.min(oldEnergy + amount, this.maxEnergy);
 
-        console.log(`玩家${player}积分增加: ${oldEnergy.toFixed(1)} -> ${this.playerEnergy[player].toFixed(1)} (+${amount.toFixed(1)})`);
+        // 记录实际获得的积分（扣除溢出部分，用于结算统计）
+        const actualAdded = this.playerEnergy[player] - oldEnergy;
+        if (window.gameInstance && window.gameInstance.gameState) {
+            window.gameInstance.gameState.totalEnergyGained[player] += actualAdded;
+        }
+
+        console.log(`玩家${player}积分增加: ${oldEnergy.toFixed(1)} -> ${this.playerEnergy[player].toFixed(1)} (+${amount.toFixed(1)}, 实际+${actualAdded.toFixed(1)})`);
 
         // 网络回放模式：不添加消息
         const isReplayMode = window.gameInstance && window.gameInstance.chessPiece && window.gameInstance.chessPiece._isNetworkReplayMode;

@@ -111,7 +111,22 @@ class GameState {
             consecutiveNoTakeoff: { 1: 0, 2: 0, 3: 0, 4: 0 }, // 连续无法起飞的次数
             maxConsecutiveSixes: { 1: 0, 2: 0, 3: 0, 4: 0 }, // 最大连续摇到6的次数
             firstFinishedPlayer: null,                       // 首个有棋子到达终点的玩家
-            bounceSteps: { 1: 0, 2: 0, 3: 0, 4: 0 }          // 累计反弹格数（终点反弹+叠子反弹）
+            bounceSteps: { 1: 0, 2: 0, 3: 0, 4: 0 },         // 累计反弹格数（终点反弹+叠子反弹）
+            maxTeleportDistance: { 1: 0, 2: 0, 3: 0, 4: 0 }, // 单次传送最大距离
+            mysteryBoxMax: { 1: 0, 2: 0, 3: 0, 4: 0 },       // 盲盒开出最高积分
+            mysteryBoxMin: { 1: 99, 2: 99, 3: 99, 4: 99 },    // 盲盒开出最低积分（初始99确保0被记录）
+            polyhedralMax: { 1: 0, 2: 0, 3: 0, 4: 0 },        // 多面骰子最大点数
+            polyhedralMin: { 1: 99, 2: 99, 3: 99, 4: 99 },     // 多面骰子最小点数（初始99确保1被记录）
+            skillUseCount: { 1: 0, 2: 0, 3: 0, 4: 0 }          // 累计使用道具次数
+        };
+
+        // 道具统计数据（用于结算面板显示）
+        this.totalEnergyGained = { 1: 0, 2: 0, 3: 0, 4: 0 };   // 累计获取的有效积分（扣除溢出）
+        this.skillUsage = {                                       // 各道具使用次数明细
+            1: { remoteDice: 0, teleport: 0, polyhedralDice: 0, mysteryBox: 0 },
+            2: { remoteDice: 0, teleport: 0, polyhedralDice: 0, mysteryBox: 0 },
+            3: { remoteDice: 0, teleport: 0, polyhedralDice: 0, mysteryBox: 0 },
+            4: { remoteDice: 0, teleport: 0, polyhedralDice: 0, mysteryBox: 0 }
         };
     }
 
@@ -346,7 +361,22 @@ class GameState {
             consecutiveNoTakeoff: { 1: 0, 2: 0, 3: 0, 4: 0 },
             maxConsecutiveSixes: { 1: 0, 2: 0, 3: 0, 4: 0 },
             firstFinishedPlayer: null,
-            bounceSteps: { 1: 0, 2: 0, 3: 0, 4: 0 }
+            bounceSteps: { 1: 0, 2: 0, 3: 0, 4: 0 },
+            maxTeleportDistance: { 1: 0, 2: 0, 3: 0, 4: 0 },
+            mysteryBoxMax: { 1: 0, 2: 0, 3: 0, 4: 0 },
+            mysteryBoxMin: { 1: 99, 2: 99, 3: 99, 4: 99 },
+            polyhedralMax: { 1: 0, 2: 0, 3: 0, 4: 0 },
+            polyhedralMin: { 1: 99, 2: 99, 3: 99, 4: 99 },
+            skillUseCount: { 1: 0, 2: 0, 3: 0, 4: 0 }
+        };
+
+        // 重置道具统计数据
+        this.totalEnergyGained = { 1: 0, 2: 0, 3: 0, 4: 0 };
+        this.skillUsage = {
+            1: { remoteDice: 0, teleport: 0, polyhedralDice: 0, mysteryBox: 0 },
+            2: { remoteDice: 0, teleport: 0, polyhedralDice: 0, mysteryBox: 0 },
+            3: { remoteDice: 0, teleport: 0, polyhedralDice: 0, mysteryBox: 0 },
+            4: { remoteDice: 0, teleport: 0, polyhedralDice: 0, mysteryBox: 0 }
         };
     }
 

@@ -169,6 +169,10 @@ class GameInfo {
              }
         }
 
+        if (type === 'skill_usage' && messageData.data.skillName === '盲盒') {
+            isSkipList = true;
+        }
+
         if (!isSkipList) {
             const messageElement = document.createElement('div');
             messageElement.className = 'info-message';
@@ -521,7 +525,7 @@ class GameInfo {
             const targetSpan = hasTarget ? `<span class="player-text player-${targetPlayer}">${targetName}</span>` : `<span class="action-text"> 对手 </span>`;
             actionSpan1 = `<span class="beat-text"> 击败 </span>${targetSpan}<span class="action-text">！获得 </span>`;
         } else if (source === 'mysteryBox') {
-            actionSpan1 = `<span class="action-text"> 使用了盲盒，获得 </span>`;
+            actionSpan1 = `<span class="action-text"> 使用了 </span><span class="skill-name-text">[盲盒]</span><span class="action-text">，获得 </span>`;
         }
 
         return `${playerSpan}${actionSpan1}${energySpan}${actionSpan2}`;
