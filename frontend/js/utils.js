@@ -138,6 +138,11 @@ export async function beatChessAtPosition(absolutePosition, currentPlayer, gameS
         gameState = globalGameState;
     }
 
+    // 欢乐模式：跳过所有 beat 操作
+    if (gameState && typeof gameState.isHappyMode === 'function' && gameState.isHappyMode()) {
+        return { hasBeat: false };
+    }
+
     // 导入gameInfo用于显示beat信息
     const { gameInfo } = await import('./gameInfo.js');
 
@@ -259,6 +264,63 @@ export function calculateChessProgress(chess, player) {
 export function getOpponentPlayer(player) {
     const opponents = { 1: 3, 2: 4, 3: 1, 4: 2 };
     return opponents[player];
+}
+
+/**
+ * 检查指定位置是否有其他玩家的棋子（含叠子）
+ * 用于欢乐模式碰撞奖励检测
+ * 使用绝对坐标比较，因为不同玩家的路径位置映射到不同的绝对位置
+ */
+export function hasOtherPlayerChessAtPosition(currentPlayer, position, gameState) {
+    if (!gameState || !gameState.playerChess) return -1;
+    // 终点通道（>=51）每玩家独立，不参与碰撞检测
+    if (position >= 51) return -1;
+    const currentAbsolutePos = getAbsolutePosition(currentPlayer, position);
+    if (currentAbsolutePos < 0) return -1;
+
+    const players = Object.keys(gameState.playerChess).map(Number);
+    for (const p of players) {
+        if (p === currentPlayer) continue;
+        const chesses = gameState.playerChess[p];
+        if (!Array.isArray(chesses)) continue;
+        for (const chess of chesses) {
+            if (chess && !chess.finished && chess.position >= 0 && chess.position < 51) {
+                const otherAbsolutePos = getAbsolutePosition(p, chess.position);
+                if (otherAbsolutePos === currentAbsolutePos) {
+                    return p; // 返回被撞的玩家编号
+                }
+            }
+        }
+    }
+    return -1; // 没有其他玩家棋子
+}
+
+/**
+ * 获取指定位置其他玩家的棋子总数（含叠子）
+ * 用于欢乐模式碰撞奖励计算
+ */
+export function getEnemyChessCountAtPosition(currentPlayer, position, gameState) {
+    if (!gameState || !gameState.playerChess) return 0;
+    if (position >= 51) return 0;
+    const currentAbsolutePos = getAbsolutePosition(currentPlayer, position);
+    if (currentAbsolutePos < 0) return 0;
+
+    let count = 0;
+    const players = Object.keys(gameState.playerChess).map(Number);
+    for (const p of players) {
+        if (p === currentPlayer) continue;
+        const chesses = gameState.playerChess[p];
+        if (!Array.isArray(chesses)) continue;
+        for (const chess of chesses) {
+            if (chess && !chess.finished && chess.position >= 0 && chess.position < 51) {
+                const otherAbsolutePos = getAbsolutePosition(p, chess.position);
+                if (otherAbsolutePos === currentAbsolutePos) {
+                    count++;
+                }
+            }
+        }
+    }
+    return count;
 }
 
 // 检查指定玩家的位置53是否有棋子
@@ -434,5 +496,7 @@ export const utils = {
     hasOpponentStackAtPosition53,
     isStackAtAbsolutePosition,
     checkStackInPath,
-    checkStackInJumpPath
+    checkStackInJumpPath,
+    hasOtherPlayerChessAtPosition,
+    getEnemyChessCountAtPosition
 };

@@ -181,10 +181,22 @@
                                     <!-- 道具模式设置 -->
                                     <div class="skill-mode-setting">
                                         <div class="toggle-option-group">
+                                            <div class="toggle-option-group-header">
+                                                <span>更多模式</span>
+                                                <span class="toggle-group-help" onclick="showModeRulesModal()">?</span>
+                                            </div>
                                             <div class="toggle-option">
                                                 <span class="toggle-label-text">道具模式</span>
                                                 <label class="toggle-switch">
                                                     <input type="checkbox" id="localSkillModeCheckbox">
+                                                    <span class="toggle-slider"></span>
+                                                </label>
+                                            </div>
+                                            <!-- 欢乐模式设置 -->
+                                            <div class="toggle-option">
+                                                <span class="toggle-label-text">欢乐模式</span>
+                                                <label class="toggle-switch">
+                                                    <input type="checkbox" id="localHappyModeCheckbox">
                                                     <span class="toggle-slider"></span>
                                                 </label>
                                             </div>
@@ -384,10 +396,22 @@
                                             <!-- 道具模式设置 -->
                                             <div class="skill-mode-setting">
                                                 <div class="toggle-option-group">
+                                                    <div class="toggle-option-group-header">
+                                                        <span>更多模式</span>
+                                                        <span class="toggle-group-help" onclick="showModeRulesModal()">?</span>
+                                                    </div>
                                                     <div class="toggle-option">
                                                         <span class="toggle-label-text">道具模式</span>
                                                         <label class="toggle-switch">
                                                             <input type="checkbox" id="skillModeCheckbox">
+                                                            <span class="toggle-slider"></span>
+                                                        </label>
+                                                    </div>
+                                                    <!-- 欢乐模式设置 -->
+                                                    <div class="toggle-option">
+                                                        <span class="toggle-label-text">欢乐模式</span>
+                                                        <label class="toggle-switch">
+                                                            <input type="checkbox" id="happyModeCheckbox">
                                                             <span class="toggle-slider"></span>
                                                         </label>
                                                     </div>
@@ -552,10 +576,22 @@
                                     <!-- 道具模式设置 -->
                                     <div class="skill-mode-setting">
                                         <div class="toggle-option-group">
+                                            <div class="toggle-option-group-header">
+                                                <span>更多模式</span>
+                                                <span class="toggle-group-help" onclick="showModeRulesModal()">?</span>
+                                            </div>
                                             <div class="toggle-option">
                                                 <span class="toggle-label-text">道具模式</span>
                                                 <label class="toggle-switch">
                                                     <input type="checkbox" id="aiSkillModeCheckbox">
+                                                    <span class="toggle-slider"></span>
+                                                </label>
+                                            </div>
+                                            <!-- 欢乐模式设置 -->
+                                            <div class="toggle-option">
+                                                <span class="toggle-label-text">欢乐模式</span>
+                                                <label class="toggle-switch">
+                                                    <input type="checkbox" id="aiHappyModeCheckbox">
                                                     <span class="toggle-slider"></span>
                                                 </label>
                                             </div>
@@ -773,9 +809,51 @@
                     </svg></a> by <a href="https://github.com/ZTMYO/MinimalistAeroplaneChess" target="_blank">@ZTMYO</a></div>
         </div>
     </div>
+
+    <!-- 拓展规则介绍弹窗 -->
+    <div class="mode-rules-overlay" id="modeRulesModal" style="display:none;" onclick="hideModeRulesModal()">
+        <div class="mode-rules-popup" onclick="event.stopPropagation()">
+            <div class="mode-rules-popup-header">
+                <h2>拓展规则介绍</h2>
+                <button class="mode-rules-close" onclick="hideModeRulesModal()" type="button">&times;</button>
+            </div>
+            <div class="mode-rules-popup-body">
+                <div class="mode-rule-section">
+                    <h3>道具模式</h3>
+                    <ul>
+                        <li>击败对手棋子可获得积分，积分上限 100。</li>
+                        <li>消耗积分兑换道具，在投掷前使用：</li>
+                        <li class="sub-item">遥控骰子（70分）— 指定 1~6 任意点数</li>
+                        <li class="sub-item">传送门（40分）— 将 1 颗棋子传送至前方第 12 格</li>
+                        <li class="sub-item">多面骰子（50分）— 投掷 1~12 骰子</li>
+                        <li class="sub-item">盲盒（15分）— 随机获得最多 40 积分，积分 ≥ 40 时不可用，使用后跳过回合</li>
+                    </ul>
+                </div>
+                <div class="mode-rule-section">
+                    <h3>欢乐模式</h3>
+                    <ul>
+                        <li>无终点反弹 / 叠子反弹 — 超过终点直接胜利。</li>
+                        <li>无连投惩罚 — 连续 3 次 6 不触发棋子回起点。</li>
+                        <li>无撞机 — 棋子之间不发生碰撞。</li>
+                        <li>碰撞奖励 — 落在其他玩家棋子上奖励前进敌方棋子数×2步。</li>
+                        <li>奖励可连锁触发 — 奖励落地后再次踩到继续奖励，过程中触发跳子/飞棋正常执行。</li>
+                        <li>道具模式下碰撞奖励同时获得积分奖励。</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script type="module" src="./js/indexMain.js"></script>
+    <script>
+        function showModeRulesModal() {
+            document.getElementById('modeRulesModal').style.display = 'flex';
+        }
+        function hideModeRulesModal() {
+            document.getElementById('modeRulesModal').style.display = 'none';
+        }
+    </script>
 
 
 </body>
-
 </html>

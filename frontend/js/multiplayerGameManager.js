@@ -1094,6 +1094,11 @@ class MultiplayerGameManager {
             }
         }
 
+        // 恢复欢乐模式标志
+        if (gameData.happyMode !== undefined) {
+            gameState.setHappyMode(gameData.happyMode);
+        }
+
         // 确保currentPlayer已设置（最终检查）
         if (!gameState.getCurrentPlayer()) {
             gameState.setCurrentPlayer(1);
@@ -1547,7 +1552,8 @@ class MultiplayerGameManager {
                     const gs = window.gameState;
                     const consecutiveSixes = typeof gs?.getConsecutiveSixes === 'function' ? gs.getConsecutiveSixes() : gs?.consecutiveSixes;
                     const isThirdSixRisk = !!consecutiveSixes && consecutiveSixes >= 2;
-                    if (isThirdSixRisk) {
+                    const isHappyMode = typeof gs?.isHappyMode === 'function' ? gs.isHappyMode() : false;
+                    if (isThirdSixRisk && !isHappyMode) {
                         diceDisplay.classList.remove('dice-penalty-warning');
                         diceDisplay.classList.add('dice-third-penalty');
                     }
@@ -2326,6 +2332,14 @@ class MultiplayerGameManager {
         console.log(`[FinalMoveResult] 玩家${data.player} 棋子${data.chessIndex} 最终位置${data.finalPosition}`);
 
         if (!this.gameInstance?.chessPiece) return;
+
+        // 防无限重试：最多重试20次（约2秒）
+        data._retryCount = (data._retryCount || 0) + 1;
+        if (data._retryCount > 20) {
+            console.warn('[FinalMoveResult] 重试次数超限，强制处理');
+            this.gameInstance.chessPiece._isNetworkReplayMode = false;
+        }
+
         // 如果正在回放模式，延迟处理，确保回放完成
         if (this.gameInstance.chessPiece._isNetworkReplayMode) {
             console.log('[FinalMoveResult] 正在回放中，延迟100ms后处理');

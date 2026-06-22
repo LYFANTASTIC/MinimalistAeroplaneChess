@@ -928,14 +928,18 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (roomCodeDisplayColumn && roomCodeElementColumn) {
             roomCodeElementColumn.textContent = roomCode;
+            roomCodeDisplayColumn.style.display = 'block';
         }
         if (controlTitle) {
             controlTitle.style.display = 'block';
         }
     } else {
-        // 非联机模式：隐藏整个标题区域
+        // 非联机模式：隐藏整个标题区域和房间号
         if (controlTitle) {
             controlTitle.style.display = 'none';
+        }
+        if (roomCodeDisplayColumn) {
+            roomCodeDisplayColumn.style.display = 'none';
         }
     }
 

@@ -54,7 +54,7 @@ class Dice {
         // 在整个掷骰动画期间使用纯红色样式进行高亮提示（不再红白闪烁）。
         const diceDisplay = document.getElementById('diceDisplay');
         const isThirdSixRisk = !this.gameState.isRemoteDice && this.gameState.consecutiveSixes >= 2;
-        if (diceDisplay && isThirdSixRisk) {
+        if (diceDisplay && isThirdSixRisk && !this.gameState.isHappyMode()) {
             // 先移除预备阶段用的红白闪烁警告样式
             diceDisplay.classList.remove('dice-penalty-warning');
             // 使用专门的第三次惩罚样式，使投掷动画期间始终为红色
@@ -229,31 +229,43 @@ class Dice {
 
                 // 检查是否连续摇到3次6
                 if (this.gameState.consecutiveSixes >= 3) {
-                    console.log(`[警告] 玩家${this.gameState.currentPlayer}连续摇到${this.gameState.consecutiveSixes}次6，触发惩罚！`);
+                    console.log(`[警告] 玩家${this.gameState.currentPlayer}连续摇到${this.gameState.consecutiveSixes}次6`);
 
-                    const diceDisplay = document.getElementById('diceDisplay');
-                    if (diceDisplay) {
-                        diceDisplay.classList.add('dice-shake');
-                        setTimeout(() => {
-                            diceDisplay.classList.remove('dice-shake');
-                        }, 500);
+                    if (this.gameState.isHappyMode()) {
+                        // 欢乐模式：跳过惩罚，连投奖励，继续选棋移动
+                        console.log('[欢乐模式] 跳过三次6惩罚，连投奖励');
+                        gameInfo.addConsecutiveBonus(this.gameState.currentPlayer);
+                        this.gameState.consecutiveSixes = 0;
+                        this.gameState.canReroll = true;
+                        this.gameState.justRolledSix = true;
+                        this.gameState.isRemoteDice = false;
+                        // 不 return，继续执行选棋移动逻辑
+                    } else {
+                        // 惩罚模式
+                        const diceDisplay = document.getElementById('diceDisplay');
+                        if (diceDisplay) {
+                            diceDisplay.classList.add('dice-shake');
+                            setTimeout(() => {
+                                diceDisplay.classList.remove('dice-shake');
+                            }, 500);
+                        }
+                        if (window.audioManager && window.audioManager.playShakeSound) {
+                            window.audioManager.playShakeSound();
+                        }
+
+                        // 在联机模式下，不要在本地添加消息，等待服务器广播threeSixesPenalty消息
+                        // 在单机模式下，本地添加消息
+                        if (!isOnlineMode) {
+                            gameInfo.addThreeSixesPenalty(this.gameState.currentPlayer);
+                        }
+
+                        // 惩罚：所有棋子返回起点
+                        await this.handleThreeSixesPenalty();
+
+                        // 清除遥控骰子标记
+                        this.gameState.isRemoteDice = false;
+                        return;
                     }
-                    if (window.audioManager && window.audioManager.playShakeSound) {
-                        window.audioManager.playShakeSound();
-                    }
-
-                    // 在联机模式下，不要在本地添加消息，等待服务器广播threeSixesPenalty消息
-                    // 在单机模式下，本地添加消息
-                    if (!isOnlineMode) {
-                        gameInfo.addThreeSixesPenalty(this.gameState.currentPlayer);
-                    }
-
-                    // 惩罚：所有棋子返回起点
-                    await this.handleThreeSixesPenalty();
-
-                    // 清除遥控骰子标记
-                    this.gameState.isRemoteDice = false;
-                    return;
                 } else {
                     // 摇到6但未达到3次，可以重新投骰
                     this.gameState.canReroll = true;

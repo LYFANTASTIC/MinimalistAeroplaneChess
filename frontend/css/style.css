@@ -2204,6 +2204,11 @@ use[href="#checkmark"] {
     font-weight: bold;
     text-shadow: none;
 }
+.move-type-bonus {
+    color: #efa0c0;
+    font-weight: bold;
+    text-shadow: none;
+}
 
 .finish-text {
     color: #85c594;
@@ -2251,6 +2256,11 @@ use[href="#checkmark"] {
 .dice-special,
 .consecutive-bonus {
     color: #65bb9e;
+    font-weight: bold;
+    text-shadow: none;
+}
+.collision-bonus {
+    color: #efa0c0;
     font-weight: bold;
     text-shadow: none;
 }
@@ -3624,6 +3634,82 @@ use[href="#checkmark"] {
     text-shadow: none;
 }
 
+/* 拓展规则介绍弹窗（简单弹出，无遮罩动效） */
+.mode-rules-overlay {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    display: none;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+.mode-rules-overlay.show {
+    display: flex;
+}
+.mode-rules-popup {
+    max-width: 460px;
+    width: 90%;
+    background: var(--bg-light-1);
+    border: 1px solid var(--border-light);
+    border-radius: 8px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.15);
+}
+.mode-rules-popup-header {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--bg-almost-none);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.mode-rules-popup-header h2 {
+    margin: 0;
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+.mode-rules-close {
+    background: none;
+    border: none;
+    font-size: 22px;
+    color: var(--font-faint);
+    cursor: pointer;
+    line-height: 1;
+    padding: 0;
+}
+.mode-rules-close:hover {
+    color: var(--text-primary);
+}
+.mode-rules-popup-body {
+    padding: 18px 20px;
+}
+.mode-rule-section {
+    margin-bottom: 20px;
+}
+.mode-rule-section:last-child {
+    margin-bottom: 0;
+}
+.mode-rule-section h3 {
+    font-size: 16px;
+    font-weight: 600;
+    margin: 0 0 10px 0;
+    color: var(--text-primary);
+}
+.mode-rule-section ul {
+    margin: 0;
+    padding-left: 18px;
+}
+.mode-rule-section li {
+    font-size: 14px;
+    line-height: 1.7;
+    color: var(--text-secondary);
+}
+.mode-rule-section li.sub-item {
+    padding-left: 14px;
+    list-style: circle;
+    font-size: 13px;
+}
+
 .settlement-info {
     display: flex;
     flex-direction: row;
@@ -3639,6 +3725,15 @@ use[href="#checkmark"] {
     font-size: 14px;
     font-weight: normal;
     white-space: nowrap;
+}
+.settlement-mode {
+    color: var(--accent-color);
+    font-size: 14px;
+    font-weight: bold;
+    white-space: nowrap;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.08);
 }
 
 .modal-close {
@@ -5029,6 +5124,7 @@ use[href="#checkmark"] {
 
 .toggle-option-group {
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
     padding: 6px 20px;
@@ -5036,6 +5132,35 @@ use[href="#checkmark"] {
     gap: 15px;
     border-radius: 10px;
     box-shadow: none;
+}
+
+.toggle-option-group-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 2px;
+}
+.toggle-group-help {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #aaa;
+    color: #fff;
+    font-size: 12px;
+    font-weight: bold;
+    cursor: pointer;
+    line-height: 1;
+    user-select: none;
+    transition: background 0.15s;
+}
+.toggle-group-help:hover {
+    background: #888;
 }
 
 .toggle-option {

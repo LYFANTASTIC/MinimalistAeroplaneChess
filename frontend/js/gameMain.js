@@ -72,6 +72,11 @@ class FlyingChessGame {
         // 将aiTakeoverManager暴露到全局，供其他模块使用
         window.aiTakeoverManager = aiTakeoverManager;
 
+        // 将积分/道具管理器暴露到全局，供其他模块使用
+        window.energyManager = this.energyManager;
+        window.energyDisplay = this.energyDisplay;
+        window.skillManager = this.skillManager;
+
         // 设置全局游戏实例引用（供其他模块使用）
         window.gameInstance = this;
 
@@ -357,13 +362,19 @@ class FlyingChessGame {
                     mode: 'online_multiplayer',
                     playerCount: multiplayerGameData.players ? multiplayerGameData.players.length : 2,
                     pieceCount: multiplayerGameData.pieceCount || 4,
-                    skillMode: multiplayerGameData.skillMode || false // 添加道具模式配置
+                    skillMode: multiplayerGameData.skillMode || false,
+                    happyMode: multiplayerGameData.happyMode || false
                 };
                 this.updatePageTitle(multiplayerConfig);
 
                 // 设置棋子数量
                 if (multiplayerGameData.pieceCount) {
                     gameState.initializePlayerChess(multiplayerGameData.pieceCount);
+                }
+
+                // 设置欢乐模式标志
+                if (multiplayerGameData.happyMode !== undefined) {
+                    gameState.setHappyMode(multiplayerGameData.happyMode);
                 }
 
                 // 设置在线多人模式标志
@@ -453,6 +464,11 @@ class FlyingChessGame {
                 // 设置棋子数量
                 if (gameConfig.pieceCount) {
                     gameState.initializePlayerChess(gameConfig.pieceCount);
+                }
+
+                // 设置欢乐模式标志
+                if (gameConfig.happyMode !== undefined) {
+                    gameState.setHappyMode(gameConfig.happyMode);
                 }
 
                 // 处理本地多人模式
@@ -663,14 +679,18 @@ class FlyingChessGame {
                 const playerCount = gameConfig.players?.length || gameConfig.playerCount || 4;
                 const pieceCount = gameConfig.pieceCount || 4;
                 const skillMode = gameConfig.skillMode === true;
-                const modeText = skillMode ? '道具模式' : '标准模式';
+                const happyMode = gameConfig.happyMode === true;
+                let modeText = skillMode ? '道具模式' : '标准模式';
+                if (happyMode) modeText += '·欢乐';
                 titleText = `本地多人-${playerCount}人${pieceCount}棋子-${modeText}`;
             } else if (gameConfig.mode === 'online_multiplayer') {
                 // 在线多人模式
                 const playerCount = gameConfig.playerCount || 4;
                 const pieceCount = gameConfig.pieceCount || 4;
                 const skillMode = gameConfig.skillMode === true;
-                const modeText = skillMode ? '道具模式' : '标准模式';
+                const happyMode = gameConfig.happyMode === true;
+                let modeText = skillMode ? '道具模式' : '标准模式';
+                if (happyMode) modeText += '·欢乐';
                 titleText = `在线多人-${playerCount}人${pieceCount}棋子-${modeText}`;
             } else {
                 // 人机对战模式 - 动态计算玩家数量
@@ -679,7 +699,9 @@ class FlyingChessGame {
                     : (gameConfig.playerCount || 4);
                 const pieceCount = gameConfig.pieceCount || 4;
                 const skillMode = gameConfig.skillMode === true;
-                const modeText = skillMode ? '道具模式' : '标准模式';
+                const happyMode = gameConfig.happyMode === true;
+                let modeText = skillMode ? '道具模式' : '标准模式';
+                if (happyMode) modeText += '·欢乐';
                 titleText = `人机对战-${playerCount}人${pieceCount}棋子-${modeText}`;
             }
 
@@ -1261,6 +1283,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (roomCodeDisplayColumn && roomCodeElementColumn) {
             roomCodeElementColumn.textContent = roomCode;
+            roomCodeDisplayColumn.style.display = 'block';
         }
         if (controlTitle) {
             controlTitle.style.display = 'block';
@@ -1291,9 +1314,12 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
     } else {
-        // 非联机模式：隐藏整个标题区域
+        // 非联机模式：隐藏整个标题区域和房间号
         if (controlTitle) {
             controlTitle.style.display = 'none';
+        }
+        if (roomCodeDisplayColumn) {
+            roomCodeDisplayColumn.style.display = 'none';
         }
     }
 

@@ -30,6 +30,7 @@ class GameState {
         this.isOnlineMultiplayer = false; // 是否为在线多人模式
         this.isInChessAnimation = false; // 是否在棋子动画中（防止bringToFront破坏动画）
         this.isThreeSixesPenaltyActive = false; // 三次6惩罚是否正在执行中
+        this.happyMode = false; // 欢乐模式标志
 
         // 棋子数量配置
         this.pieceCount = 4; // 默认每个玩家4个棋子
@@ -725,6 +726,16 @@ class GameState {
     // 设置选中的棋子
     setSelectedChess(chess) {
         this.selectedChess = chess;
+    }
+
+    // 获取欢乐模式状态
+    isHappyMode() {
+        return this.happyMode;
+    }
+
+    // 设置欢乐模式状态
+    setHappyMode(enabled) {
+        this.happyMode = enabled === true;
     }
 
     // 获取玩家棋子数据

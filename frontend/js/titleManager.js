@@ -63,6 +63,31 @@ class TitleManager {
     }
 
     /**
+     * 获取欢乐模式下禁用的称号 ID 集合
+     */
+    _getHappyModeDisabledIds() {
+        return new Set([
+            'invisible',
+            'tailwind_walker',
+            'home_visitor'
+        ]);
+    }
+
+    /**
+     * 调整称号文本（欢乐模式将"击败"替换为"碰撞"）
+     */
+    _adjustTitleForHappyMode(title, gameState) {
+        if (!gameState || !gameState.isHappyMode || !gameState.isHappyMode()) {
+            return title;
+        }
+        return {
+            ...title,
+            name: title.name ? title.name.replaceAll('击败', '碰撞') : title.name,
+            desc: title.desc ? title.desc.replaceAll('击败', '碰撞') : title.desc
+        };
+    }
+
+    /**
      * 收集玩家所有符合条件的称号（不再只取最高优先级的一个）
      * @returns {Array} 称号对象数组
      */
@@ -187,7 +212,11 @@ class TitleManager {
             titles.push(this.TITLES.DEFAULT);
         }
 
-        return titles;
+        // 欢乐模式：过滤掉不适配的称号，再将"击败"替换为"碰撞"
+        const disabledIds = gameState?.isHappyMode?.() ? this._getHappyModeDisabledIds() : new Set();
+        return titles
+            .filter(t => !disabledIds.has(t.id))
+            .map(t => this._adjustTitleForHappyMode(t, gameState));
     }
 
     /**

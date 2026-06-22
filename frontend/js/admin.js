@@ -218,7 +218,7 @@ class AdminPanel {
 
             // 7. 配置信息列
             const configInfo = `<div style="font-size:12px; color:var(--text-primary);">
-                棋子${room.settings?.pieceCount || 4} 道具${room.settings?.skillMode ? '开' : '关'}
+                棋子${room.settings?.pieceCount || 4} 道具${room.settings?.skillMode ? '开' : '关'} 欢乐${room.settings?.happyMode ? '开' : '关'}
             </div>`;
 
             return `

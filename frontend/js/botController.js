@@ -745,14 +745,82 @@ class BotController {
             analysis.consequences.push('normal');
         }
 
-        // 无论何种移动，检查当前棋子后方 4 格内是否有威胁
-        const threatCheck = this.checkEnemyBehind(player, currentPosition);
-        if (threatCheck.hasThreat) {
-            analysis.consequences.push('escape_threat');
-            analysis.threatLevel = threatCheck.threatLevel; // 威胁等级（敌人数量）
+        // 欢乐模式：调整后果分析
+        if (gameState.isHappyMode()) {
+            this._adjustForHappyMode(analysis, player, currentPosition);
+        } else {
+            // 非欢乐模式：检查当前棋子后方 4 格内是否有威胁
+            const threatCheck = this.checkEnemyBehind(player, currentPosition);
+            if (threatCheck.hasThreat) {
+                analysis.consequences.push('escape_threat');
+                analysis.threatLevel = threatCheck.threatLevel;
+            }
         }
 
         return analysis;
+    }
+
+    /**
+     * 欢乐模式：调整移动后果分析
+     * - 碰撞不送人回家，改为奖励步数
+     * - 踩叠子按数量奖励更多步数
+     * - 无需逃离威胁
+     */
+    _adjustForHappyMode(analysis, player, currentPosition) {
+        const hasBeat = analysis.consequences.includes('beat') ||
+                        analysis.consequences.includes('beat_after_jump') ||
+                        analysis.consequences.includes('beat_after_bounce') ||
+                        analysis.consequences.includes('beat_after_stack_bounce');
+        const isStackCollision = analysis.consequences.includes('stack_collision');
+
+        // 移除所有 beat 相关后果（欢乐模式不送人回家）
+        analysis.consequences = analysis.consequences.filter(c =>
+            c !== 'beat' && c !== 'beat_after_jump' &&
+            c !== 'beat_after_bounce' && c !== 'beat_after_stack_bounce' &&
+            c !== 'stack_collision' && c !== 'escape_threat'
+        );
+        analysis.escape_threat = undefined;
+
+        // 如果原本能踩到敌人，改为碰撞奖励
+        if (hasBeat || isStackCollision) {
+            // 获取最终位置的敌人数量
+            const finalPos = analysis.targetPosition !== undefined ? analysis.targetPosition : currentPosition;
+            const keyPositions = [];
+
+            // 收集需要检测碰撞的位置
+            if (analysis.jumpDetails && analysis.jumpDetails.hasJump) {
+                keyPositions.push(analysis.jumpDetails.finalPosition);
+            }
+            if (analysis.bouncePosition !== undefined) {
+                keyPositions.push(analysis.bouncePosition);
+            }
+            if (analysis.targetPosition !== undefined && !keyPositions.includes(analysis.targetPosition)) {
+                keyPositions.push(analysis.targetPosition);
+            }
+            if (keyPositions.length === 0) {
+                keyPositions.push(finalPos);
+            }
+
+            // 对各终点位置统计敌人数量
+            let totalEnemyCount = 0;
+            for (const pos of keyPositions) {
+                const count = this.utils.getEnemyChessCountAtPosition(player, pos, gameState);
+                totalEnemyCount = Math.max(totalEnemyCount, count);
+            }
+
+            if (totalEnemyCount > 0) {
+                analysis.consequences.push('collision_bonus');
+                analysis.collisionEnemyCount = totalEnemyCount;
+                analysis.collisionBonusSteps = Math.max(2, totalEnemyCount * 2);
+            }
+        }
+
+        // 检查是否有危险的碰撞奖励（奖励后可能踩到自家叠子或进入危险位置）
+        // 这部分由优先级数值处理
+
+        if (analysis.consequences.length === 0) {
+            analysis.consequences.push('normal');
+        }
     }
 
     /**
@@ -828,6 +896,21 @@ class BotController {
                 case 'jump':
                     priority += 300; // 中高优先级：跳子
                     break;
+                case 'collision_bonus':
+                    // 欢乐模式：踩敌人获得额外步数，非常有价值
+                    // 基础分比 beat 略高（奖励步数同时不浪费对手进度）
+                    priority += 550;
+                    // 敌人越多收益越大
+                    if (analysis.collisionEnemyCount) {
+                        priority += analysis.collisionEnemyCount * 100;
+                        // 奖励步数越多越好
+                        priority += (analysis.collisionBonusSteps || 0) * 15;
+                    }
+                    // 如果碰撞后还能触发跳子/飞棋，价值更高
+                    if (analysis.jumpDetails && analysis.jumpDetails.hasJump) {
+                        priority += 80;
+                    }
+                    break;
                 case 'takeoff':
                     priority += 200; // 中等优先级：起飞
                     break;
@@ -880,7 +963,15 @@ class BotController {
                     }
                     break;
                 case 'stack_collision':
-                    priority -= 200; // 负优先级：叠子碰撞对双方都不利，应该避免
+                    if (gameState.isHappyMode()) {
+                        // 欢乐模式：叠子碰撞改为奖励（不送人回家，按叠子数量奖励步数）
+                        priority += 550;
+                        const enemyCount = analysis.collisionEnemyCount || 2;
+                        priority += enemyCount * 100;
+                        priority += Math.max(2, enemyCount * 2) * 15;
+                    } else {
+                        priority -= 200; // 负优先级：叠子碰撞对双方都不利，应该避免
+                    }
                     break;
                 case 'escape_threat':
                     // 逃离威胁：后方 4 格有敌人紧随
@@ -892,9 +983,16 @@ class BotController {
 
         // 特殊位置优先级调整：位置53的危险位置判断
         if (analysis.currentPosition === 53) {
-            // 如果棋子在位置53（危险位置），且点数不为6，可以离开危险位置，提高优先级
-            if (analysis.diceValue !== 6) {
-                priority += 150; // 提高优先级，鼓励离开危险位置53
+            if (gameState.isHappyMode()) {
+                // 欢乐模式：位置53不那么危险（没有叠子飞棋阻挡、不会送回家）
+                // 但如果有多个敌人，可能被碰撞奖励超越
+                const threatCheck = this.checkEnemyBehind(analysis.player || gameState.getCurrentPlayer(), 53);
+                if (threatCheck.hasThreat && threatCheck.threatLevel >= 2) {
+                    priority += 60; // 后方有多个敌人时稍微想离开
+                }
+            } else if (analysis.diceValue !== 6) {
+                // 非欢乐模式：位置53非常危险，尽快离开
+                priority += 150;
             }
         }
         return priority;
@@ -1207,8 +1305,9 @@ class BotController {
         if (this.utils.isJumpPoint(targetPosition)) {
             const nextJumpPoint = this.utils.getNextJumpPoint(targetPosition);
             if (nextJumpPoint) {
-                // 检查跳子路径中是否有叠子阻挡
-                const jumpPathStack = this.utils.checkStackInJumpPath(player, targetPosition, nextJumpPoint, gameState);
+                // 欢乐模式：跳子路径不受叠子阻挡
+                const isHappyMode = gameState.isHappyMode();
+                const jumpPathStack = !isHappyMode ? this.utils.checkStackInJumpPath(player, targetPosition, nextJumpPoint, gameState) : null;
                 if (jumpPathStack && jumpPathStack.hasStack) {
                     // 跳子路径被叠子阻挡，无法跳子，停在起跳点
                     console.log(`[跳子检测] 跳子路径被叠子阻挡，无法跳子，停在起跳点${targetPosition}`);
@@ -1226,8 +1325,9 @@ class BotController {
 
         // 检查特殊飞棋点
         if (targetPosition === 14 || targetPosition === 18) {
-            // 检查位置53是否有对家叠子
-            const stackCheckResult = this.utils.hasOpponentStackAtPosition53(player, gameState);
+            const isHappyMode = gameState.isHappyMode();
+            // 检查位置53是否有对家叠子（欢乐模式不阻挡）
+            const stackCheckResult = isHappyMode ? { hasStack: false } : this.utils.hasOpponentStackAtPosition53(player, gameState);
             if (!stackCheckResult.hasStack) {
                 let flyTarget;
                 if (targetPosition === 14) {
@@ -1236,8 +1336,8 @@ class BotController {
                     flyTarget = 34; // 18->30->34
                 }
 
-                // 检查飞棋路径中是否有叠子阻挡
-                const flyPathStack = this.utils.checkStackInJumpPath(player, targetPosition, flyTarget, gameState);
+                // 检查飞棋路径中是否有叠子阻挡（欢乐模式不阻挡）
+                const flyPathStack = !isHappyMode ? this.utils.checkStackInJumpPath(player, targetPosition, flyTarget, gameState) : null;
                 if (flyPathStack && flyPathStack.hasStack) {
                     // 飞棋路径被叠子阻挡，无法飞棋，按普通跳子处理
                     console.log(`[飞棋检测] 飞棋路径被叠子阻挡，无法飞棋，按普通跳子处理`);

@@ -623,34 +623,35 @@ class ChessPiece {
             let currentPosition = chess.position;
             const originalPosition = currentPosition; // 保存原始位置
 
-            // 检查前方路径上是否有其他玩家的叠子
-            const stackInfo = this.utils.checkStackInPath(player, currentPosition, steps, this.gameState);
-            let needsStackBounce = false;// 叠子阻拦
+            // 欢乐模式：跳过叠子检测和终点反弹检测
+            let needsStackBounce = false;
             let stackBounceSteps = 0;
-            let needsStackCrash = false; // 叠子碰撞
-
-            if (stackInfo) {
-                if (stackInfo.isExactHit) {
-                    needsStackCrash = true;
-                } else if (stackInfo.needsBounce) {
-                    needsStackBounce = true;
-                    stackBounceSteps = stackInfo.remainingSteps;
-                }
-            }
-
-            // 检查是否会超出终点（需要反弹）
+            let needsStackCrash = false;
             let needsBounce = false;
             let bounceSteps = 0;
 
-            // 计算移动后的位置
-            const targetPosition = currentPosition + steps;
+            if (!this.gameState.isHappyMode()) {
+                // 检查前方路径上是否有其他玩家的叠子
+                const stackInfo = this.utils.checkStackInPath(player, currentPosition, steps, this.gameState);
 
-            // 如果移动后会超过位置56（终点），则需要反弹
-            // 适用于所有情况：在终点通道内或从外面进入终点通道
-            if (targetPosition > 56 && currentPosition < 56) {
-                needsBounce = true;
-                bounceSteps = targetPosition - 56;
-                console.log(`[反弹检测] 从位置${currentPosition}投掷${steps}点会到达${targetPosition}，超出终点，需要反弹${bounceSteps}步`);
+                if (stackInfo) {
+                    if (stackInfo.isExactHit) {
+                        needsStackCrash = true;
+                    } else if (stackInfo.needsBounce) {
+                        needsStackBounce = true;
+                        stackBounceSteps = stackInfo.remainingSteps;
+                    }
+                }
+
+                // 检查是否会超出终点（需要反弹）
+                const targetPosition = currentPosition + steps;
+
+                // 如果移动后会超过位置56（终点），则需要反弹
+                if (targetPosition > 56 && currentPosition < 56) {
+                    needsBounce = true;
+                    bounceSteps = targetPosition - 56;
+                    console.log(`[反弹检测] 从位置${currentPosition}投掷${steps}点会到达${targetPosition}，超出终点，需要反弹${bounceSteps}步`);
+                }
             }
 
             // 第一阶段：向前移动
@@ -660,7 +661,12 @@ class ChessPiece {
             } else if (needsBounce) {
                 stepsToMove = 56 - currentPosition; // 移动到终点
             } else {
-                stepsToMove = steps; // 正常移动
+                // 欢乐模式：超出终点直接到终点
+                if (this.gameState.isHappyMode() && currentPosition + steps > 56) {
+                    stepsToMove = 56 - currentPosition;
+                } else {
+                    stepsToMove = steps; // 正常移动
+                }
             }
 
             // 在开始逐格移动前，先将棋子更新到当前位置并确保它在最顶层
@@ -861,19 +867,24 @@ class ChessPiece {
             } else if (needsStackBounce || needsBounce) {
                 console.log(`[反弹完成] 玩家${player}反弹完成，最终位置${actualFinalPosition}，叠子反弹不触发起跳但保持beat检测`);
             }
-            // 只有在非反弹的正常移动时才添加移动信息，且不是回放模式
-            if (!hasSpecialAction && !needsStackBounce && !needsBounce && originalPosition !== -1 && !this._isNetworkReplayMode) {
+
+            // 欢乐模式：只看最终格子判定碰撞奖励
+            // 无论是跳子/飞棋落地还是普通落脚，只要有敌人就触发
+            // 先添加移动信息，再处理碰撞奖励，保证消息顺序正确
+            if (!this._isNetworkReplayMode && !hasSpecialAction && !needsStackBounce && !needsBounce && originalPosition !== -1) {
                 gameInfo.addChessMove(player, chessIndex, 'move', originalPosition, actualFinalPosition);
+            }
+            if (!this._isNetworkReplayMode && this.gameState.isHappyMode() && !chess.finished) {
+                await this._handleHappyModeCollisionBonus(player, chessIndex, chess.position);
             }
 
             // 移动完成后的逻辑
             this.gameState.selectedChess = null;
 
             // 在最终位置检查beat操作（只有正常移动且未完成的棋子才检查）
-            // 注意：起跳点不排除beat检测，因为叠子/终点反弹不走 handleSpecialPositions，
-            // 如果起跳点有其他玩家的棋子需要正常 beat；正常移动时 handleSpecialPositions 内部
-            // 已有独立的 landing beat 检测（在 animateJump 中），此处不冲突
+            // 欢乐模式：跳过 beat 检测
             const shouldCheckBeat = !chess.finished &&
+                !this.gameState.isHappyMode() &&
                 actualFinalPosition <= 51 &&
                 actualFinalPosition >= 0;
 
@@ -911,6 +922,7 @@ class ChessPiece {
                 }
             }
 
+            // 联机同步最终位置（放在碰撞奖励之后，确保发送的是真正的最终位置）
             if (!this._isNetworkReplayMode && this.gameState.isOnlineMultiplayer && window.gameInstance && window.gameInstance.multiplayerGameManager) {
                 window.gameInstance.multiplayerGameManager.syncFinalMoveResult(player, chessIndex, chess.position, this._currentMoveBeatenChesses);
             }
@@ -921,6 +933,111 @@ class ChessPiece {
             // 确保在任何情况下都清除移动状态和防抖标志
             this.gameState.setChessMoving(false);
             this.clearClickDebounce();
+        }
+    }
+
+    /**
+     * 欢乐模式：碰撞奖励处理（连锁触发）
+     */
+    async _handleHappyModeCollisionBonus(player, chessIndex, startPosition) {
+        const chess = this.gameState.playerChess[player][chessIndex];
+        let pos = startPosition;
+
+        while (true) {
+            if (chess.finished) break;
+
+            // 检查当前位置是否有其他玩家的棋子（绝对坐标）
+            const collidedPlayer = this.utils.hasOtherPlayerChessAtPosition(player, pos, this.gameState);
+            if (collidedPlayer < 0) break;
+
+            // 统计击败次数（按照叠子个数）
+            const enemyCount = this.utils.getEnemyChessCountAtPosition(player, pos, this.gameState);
+            for (let i = 0; i < enemyCount; i++) {
+                this.gameState.incrementDefeatCount(player, collidedPlayer);
+            }
+
+            // 计算奖励步数：叠子数量 × 2
+            const bonusSteps = Math.max(2, enemyCount * 2);
+
+            console.log(`[欢乐模式] 玩家${player}棋子${chessIndex}在${pos}碰撞${enemyCount}颗敌方棋子，奖励前进${bonusSteps}步`);
+
+            // 播放击败音效
+            audioManager.playBeatSound();
+
+            // 添加碰撞奖励消息（包含被碰撞的玩家信息）
+            gameInfo.addCollisionBonus(player, collidedPlayer);
+
+            // 碰撞停顿
+            await new Promise(resolve => setTimeout(resolve, 300));
+
+            // 道具模式：积分奖励（每颗敌方棋子20分）
+            if (window.energyManager && window.energyManager.isSkillModeEnabled()) {
+                // 找到碰撞位置敌方的一个棋子索引（用于粒子特效起点）
+                const enemyChesses = this.gameState.playerChess[collidedPlayer];
+                let targetIdx = 0;
+                const absPos = this.utils.getAbsolutePosition(player, pos);
+                for (let ci = 0; ci < enemyChesses.length; ci++) {
+                    const ec = enemyChesses[ci];
+                    if (ec && !ec.finished) {
+                        const ecAbsPos = this.utils.getAbsolutePosition(collidedPlayer, ec.position);
+                        if (ecAbsPos === absPos) {
+                            targetIdx = ci;
+                            break;
+                        }
+                    }
+                }
+                window.energyManager.addBonusEnergy(player, 20 * enemyCount, collidedPlayer, targetIdx);
+            }
+
+            // 逐格移动（纯移动，不触发跳子/飞棋）
+            let stepsRemaining = bonusSteps;
+            while (stepsRemaining > 0 && !chess.finished) {
+                const nextPos = pos + 1;
+
+                // 终点处理
+                if (nextPos > 56) {
+                    chess.position = 56;
+                    chess.finished = true;
+                    this.animation.updateChessPosition(player, chessIndex);
+                    this.updateAllChessPositions();
+                    gameInfo.addChessMove(player, chessIndex, 'move', pos, 56);
+                    break;
+                }
+
+                pos++;
+                chess.position = pos;
+                chess.lastLandPos = this.generateUniqueLastLandPos(pos);
+                stepsRemaining--;
+
+                this.animation.updateChessPosition(player, chessIndex);
+                audioManager.playMoveSound();
+                await new Promise(resolve => setTimeout(resolve, 200));
+            }
+
+            this.animation.updateChessPosition(player, chessIndex);
+            this.updateAllChessPositions();
+
+            // 检查叠子
+            if (!chess.finished) {
+                this.checkStackFormation(player, pos);
+            }
+
+            if (chess.finished) break;
+
+            // 落地后判定：起跳点/飞棋点 → 正常触发跳子/飞棋
+            if (this.utils.isJumpPoint(pos)) {
+                const prevGuard = this.gameState.isInChessAnimation;
+                this.gameState.isInChessAnimation = true;
+                try {
+                    await this.handleSpecialPositions(player, chessIndex, pos);
+                } finally {
+                    this.gameState.isInChessAnimation = prevGuard;
+                }
+                pos = chess.position;
+                if (chess.finished) break;
+            }
+
+            // 继续循环：检查新位置是否又有其他玩家的棋子（连锁碰撞）
         }
     }
 
@@ -945,6 +1062,10 @@ class ChessPiece {
     async handleSpecialPositions(player, chessIndex, position) {
         // 检查位置53是否有对家叠子，如果有则影响飞棋和跳子行为
         const stackCheckResult = this.utils.hasOpponentStackAtPosition53(player, this.gameState);
+        // 欢乐模式：不检查叠子阻挡，飞棋跳子不受限制
+        if (this.gameState.isHappyMode()) {
+            stackCheckResult.hasStack = false;
+        }
         const hasOpponentStackAt53 = stackCheckResult.hasStack;
 
         // 检查是否为特殊飞棋点
@@ -1064,20 +1185,24 @@ class ChessPiece {
         }
 
         // 检查位置53是否有对家的叠子，如果有则无法飞棋
-        const stackCheckResult = this.utils.hasOpponentStackAtPosition53(player, this.gameState);
-        if (stackCheckResult.hasStack) {
-            // console.log(`[飞棋阻挡] 位置53存在对家叠子，飞棋被阻挡，棋子停在起飞格`);
-            // 添加飞棋被阻挡的信息到游戏信息面板（非回放模式才添加）
-            if (!this._isNetworkReplayMode) {
-                const opponentPlayer = this.utils.getOpponentPlayer(player);
-                gameInfo.addStackBlock(player, opponentPlayer);
+        // 欢乐模式：跳过叠子阻挡检测
+        if (!this.gameState.isHappyMode()) {
+            const stackCheckResult = this.utils.hasOpponentStackAtPosition53(player, this.gameState);
+            if (stackCheckResult.hasStack) {
+                // console.log(`[飞棋阻挡] 位置53存在对家叠子，飞棋被阻挡，棋子停在起飞格`);
+                // 添加飞棋被阻挡的信息到游戏信息面板（非回放模式才添加）
+                if (!this._isNetworkReplayMode) {
+                    const opponentPlayer = this.utils.getOpponentPlayer(player);
+                    gameInfo.addStackBlock(player, opponentPlayer);
+                }
+                // 棋子无法飞棋，保持在当前位置
+                return;
             }
-            // 棋子无法飞棋，保持在当前位置
-            return;
         }
 
         // 检查飞棋终点是否有叠子
-        if (targetPosition !== 56) { // 不是终点的情况下才检查叠子
+        // 欢乐模式：跳过叠子碰撞检测
+        if (!this.gameState.isHappyMode() && targetPosition !== 56) { // 不是终点的情况下才检查叠子
             const targetStackInfo = this.utils.isStackAtAbsolutePosition(targetAbsolutePosition, this.gameState);
             if (targetStackInfo && targetStackInfo.player !== player) {
                 // console.log(`[飞棋撞机] 飞棋终点位置${targetPosition}有其他玩家${targetStackInfo.player}的叠子，所有棋子返回各自起点`);

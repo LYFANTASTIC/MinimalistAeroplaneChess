@@ -198,6 +198,7 @@ class RoomManager {
         name: room.name,
         pieceCount: room.settings?.pieceCount ?? 4,
         skillMode: !!(room.settings?.skillMode),
+        happyMode: !!(room.settings?.happyMode),
         playerCount: totalPlayerCount, // 包含AI玩家的总人数
         maxPlayers: 4,
         gameState: room.gameState,
@@ -270,9 +271,9 @@ class RoomManager {
   }
 
   // 创建游戏会话
-  createGameSession(gameSessionId, players, pieceCount = 4, roomCode = null, hostId = null, skillMode = false) {
-    console.log(`创建游戏会话: ${gameSessionId}, 玩家数: ${players.length}, 棋子数: ${pieceCount}`);
-    const gameSession = new GameSession(gameSessionId, players, pieceCount, roomCode, hostId, skillMode);
+  createGameSession(gameSessionId, players, pieceCount = 4, roomCode = null, hostId = null, skillMode = false, happyMode = false) {
+    console.log(`创建游戏会话: ${gameSessionId}, 玩家数: ${players.length}, 棋子数: ${pieceCount}, 欢乐模式: ${happyMode}`);
+    const gameSession = new GameSession(gameSessionId, players, pieceCount, roomCode, hostId, skillMode, happyMode);
     this.gameSessions.set(gameSessionId, gameSession);
     // 建立玩家-会话映射
     players.forEach(player => {
@@ -329,7 +330,7 @@ class RoomManager {
 
 // -------------------------- 游戏会话类（逻辑保持，优化日志）--------------------------
 class GameSession {
-  constructor(gameSessionId, players, pieceCount = 4, roomCode = null, hostId = null, skillMode = false) {
+  constructor(gameSessionId, players, pieceCount = 4, roomCode = null, hostId = null, skillMode = false, happyMode = false) {
     this.gameSessionId = gameSessionId;
     // AI玩家不需要连接状态，只有真实玩家才设置为isConnected: true
     this.players = new Map(players.map(p => [p.id, { ...p, isConnected: p.isAI ? false : true, ws: null }]));
@@ -339,6 +340,7 @@ class GameSession {
     this.roomCode = roomCode;
     this.hostId = hostId;
     this.skillMode = skillMode;
+    this.happyMode = happyMode;
     this.audioLoadedPlayers = new Set(); // 统一管理音频加载状态
     this.aiTakeoverPlayers = new Set();
     this.spectators = new Set(); // 观战者集合
@@ -355,6 +357,7 @@ class GameSession {
       defeatCounts: {},
       energyStates: {}, // 道具模式：玩家积分状态
       pieceCount,
+      happyMode, // 欢乐模式标志
       // 连投奖励相关状态
       canReroll: false,
       consecutiveSixes: 0,
@@ -451,7 +454,7 @@ class Room {
     this.gameState = 'waiting';
     this.gameSessionId = null;
     this.postGameHostId = null; // 游戏结束后，首次返回房间的玩家ID（用于锁定房主）
-    this.settings = { pieceCount: 4, aiPlayers: [], skillMode: false };
+    this.settings = { pieceCount: 4, aiPlayers: [], skillMode: false, happyMode: false };
     this.spectators = new Set(); // 观战者ID集合
     this.roomChatHistory = []; // 房间聊天历史（最多50条）
     this.createdAt = Date.now(); // 房间创建时间
@@ -1201,12 +1204,18 @@ wss.on('connection', (ws) => {
           }
         }
       } else {
-        // 非重连场景：不要覆盖“房间/会话广播连接”。
-        // 否则会出现：玩家从游戏页/房间页回到主页时建立了新WS，旧WS close 会被误判为“已切换连接”从而跳过断线处理。
-        // 只有当玩家不在任何房间或游戏会话中时，才将该WS写入 playerConnections。
+        // 非重连场景（identify/ping等）：如果玩家在游戏会话或房间中，新连接说明是页面跳转完成或重连，
+        // 立即注册新WS并取消旧WS的断线去抖定时器，防止1500ms去抖在rejoinGameSession到达前就触发。
         const inGameSession = !!roomManager.getPlayerGameSession(playerId);
         const inRoom = !!roomManager.getPlayerRoom(playerId);
-        if (!inGameSession && !inRoom) {
+        if (inGameSession || inRoom) {
+          roomManager.setPlayerConnection(playerId, ws);
+          if (roomManager.disconnectDebounceTimers.has(playerId)) {
+            clearTimeout(roomManager.disconnectDebounceTimers.get(playerId));
+            roomManager.disconnectDebounceTimers.delete(playerId);
+            console.log(`玩家 ${playerId} 新WS连接（${inGameSession ? '游戏会话' : '房间'}），取消断线去抖定时器`);
+          }
+        } else {
           roomManager.setPlayerConnection(playerId, ws);
         }
       }
@@ -2384,7 +2393,8 @@ function handleStartGame(ws, playerId) {
     room.settings.pieceCount,
     room.code,
     hostPlayer ? hostPlayer.id : null,
-    room.settings.skillMode
+    room.settings.skillMode,
+    room.settings.happyMode
   );
 
   // 继承房间内的观战者
@@ -2427,7 +2437,8 @@ function handleStartGame(ws, playerId) {
     type: 'gameStarted',
     gameSessionId,
     pieceCount: room.settings.pieceCount,
-    skillMode: room.settings.skillMode || false, // 添加道具模式配置
+    skillMode: room.settings.skillMode || false,
+    happyMode: room.settings.happyMode || false,
     room: room.toJSON()
   });
 }
@@ -2580,75 +2591,84 @@ function handleDiceRoll(ws, playerId, message) {
 
       // 检查是否连续摇到3次6
       if (gameSession.gameData.consecutiveSixes >= 3) {
-        console.log('连续摇到3次6，所有棋子返回起点！');
-        gameSession.gameData.canReroll = false;
-        gameSession.gameData.justRolledSix = false;
-        // 重置连续6的计数
-        gameSession.gameData.consecutiveSixes = 0;
+        if (gameSession.gameData.happyMode) {
+          // 欢乐模式：跳过惩罚，连投奖励，继续选棋移动
+          console.log('[欢乐模式] 跳过三次6惩罚，连投奖励');
+          gameSession.gameData.consecutiveSixes = 0;
+          gameSession.gameData.canReroll = true;
+          gameSession.gameData.justRolledSix = true;
+        } else {
+          // 经典模式：惩罚，所有棋子返回起点
+          console.log('连续摇到3次6，所有棋子返回起点！');
+          gameSession.gameData.canReroll = false;
+          gameSession.gameData.justRolledSix = false;
+          // 重置连续6的计数
+          gameSession.gameData.consecutiveSixes = 0;
 
-        // 广播三次6惩罚消息
-        gameSession.broadcast({
-          type: 'threeSixesPenalty',
-          player: message.player,
-          timestamp: Date.now()
-        });
+          // 广播三次6惩罚消息
+          gameSession.broadcast({
+            type: 'threeSixesPenalty',
+            player: message.player,
+            timestamp: Date.now()
+          });
 
-        // 同步更新服务器端的棋子状态，将受惩罚玩家的所有棋子送回基地
-        const penalizedPlayer = message.player;
-        if (gameSession.gameData.playerChess[penalizedPlayer]) {
-          for (let i = 0; i < gameSession.gameData.playerChess[penalizedPlayer].length; i++) {
-            gameSession.gameData.playerChess[penalizedPlayer][i].position = -1;
-            gameSession.gameData.playerChess[penalizedPlayer][i].finished = false;
-          }
-          console.log(`[threeSixesPenalty] 更新服务器棋子状态: 玩家${penalizedPlayer} 所有棋子已回基地`);
-        }
-
-        // 延迟切换到下一个玩家
-        setTimeout(() => {
-          // 获取所有在线玩家
-          const onlinePlayers = Array.from(gameSession.players.values())
-            .map(p => p.color)
-            .sort((a, b) => a - b);
-
-          console.log(`在线玩家列表: [${onlinePlayers.join(', ')}]`);
-
-          if (onlinePlayers.length > 0) {
-            // 找到当前玩家在列表中的索引
-            let currentIndex = onlinePlayers.indexOf(message.player);
-
-            // 如果当前玩家不在在线列表中（已断线），从第一个在线玩家开始
-            if (currentIndex === -1) {
-              currentIndex = -1; // 下一个索引将是0
+          // 同步更新服务器端的棋子状态，将受惩罚玩家的所有棋子送回基地
+          const penalizedPlayer = message.player;
+          if (gameSession.gameData.playerChess[penalizedPlayer]) {
+            for (let i = 0; i < gameSession.gameData.playerChess[penalizedPlayer].length; i++) {
+              gameSession.gameData.playerChess[penalizedPlayer][i].position = -1;
+              gameSession.gameData.playerChess[penalizedPlayer][i].finished = false;
             }
-
-            // 计算下一个玩家
-            const nextIndex = (currentIndex + 1) % onlinePlayers.length;
-            const nextPlayer = onlinePlayers[nextIndex];
-
-            console.log(`切换到玩家${nextPlayer}，重置游戏阶段为rolling`);
-
-            // 更新游戏状态
-            gameSession.gameData.currentPlayer = nextPlayer;
-            gameSession.gameData.gamePhase = 'rolling';
-            gameSession.gameData.diceValue = 0;
-            gameSession.gameData.canReroll = false;
-            gameSession.gameData.justRolledSix = false;
-            gameSession.gameData.consecutiveSixes = 0;
-
-            // 广播玩家切换消息
-            gameSession.broadcast({
-              type: 'playerTurnChange',
-              newPlayer: nextPlayer,
-              gamePhase: 'rolling',
-              reason: 'player_disconnected',
-              timestamp: Date.now()
-            });
-
-            console.log(`回合切换完成：玩家${nextPlayer}，阶段：rolling`);
-          } else {
-            console.log(`[警告] 没有在线玩家，无法切换`);
+            console.log(`[threeSixesPenalty] 更新服务器棋子状态: 玩家${penalizedPlayer} 所有棋子已回基地`);
           }
-        }, 1000);
+
+          // 延迟切换到下一个玩家
+          setTimeout(() => {
+            // 获取所有在线玩家
+            const onlinePlayers = Array.from(gameSession.players.values())
+              .map(p => p.color)
+              .sort((a, b) => a - b);
+
+            console.log(`在线玩家列表: [${onlinePlayers.join(', ')}]`);
+
+            if (onlinePlayers.length > 0) {
+              // 找到当前玩家在列表中的索引
+              let currentIndex = onlinePlayers.indexOf(message.player);
+
+              // 如果当前玩家不在在线列表中（已断线），从第一个在线玩家开始
+              if (currentIndex === -1) {
+                currentIndex = -1; // 下一个索引将是0
+              }
+
+              // 计算下一个玩家
+              const nextIndex = (currentIndex + 1) % onlinePlayers.length;
+              const nextPlayer = onlinePlayers[nextIndex];
+
+              console.log(`切换到玩家${nextPlayer}，重置游戏阶段为rolling`);
+
+              // 更新游戏状态
+              gameSession.gameData.currentPlayer = nextPlayer;
+              gameSession.gameData.gamePhase = 'rolling';
+              gameSession.gameData.diceValue = 0;
+              gameSession.gameData.canReroll = false;
+              gameSession.gameData.justRolledSix = false;
+              gameSession.gameData.consecutiveSixes = 0;
+
+              // 广播玩家切换消息
+              gameSession.broadcast({
+                type: 'playerTurnChange',
+                newPlayer: nextPlayer,
+                gamePhase: 'rolling',
+                reason: 'player_disconnected',
+                timestamp: Date.now()
+              });
+
+              console.log(`回合切换完成：玩家${nextPlayer}，阶段：rolling`);
+            } else {
+              console.log(`[警告] 没有在线玩家，无法切换`);
+            }
+          }, 1000);
+        }
       } else {
         // 摇到6但未达到3次，可以重新投骰
         gameSession.gameData.canReroll = true;
@@ -2957,6 +2977,13 @@ function handleRejoinGameSession(ws, playerId, message) {
   // 重新关联会话
   roomManager.playerSessions.set(playerId, gameSessionId);
   roomManager.setPlayerConnection(playerId, ws);
+
+  // 取消旧 WS 的断线去抖定时器（页面跳转场景：旧 WS close → 新 WS rejoin）
+  if (roomManager.disconnectDebounceTimers.has(playerId)) {
+    clearTimeout(roomManager.disconnectDebounceTimers.get(playerId));
+    roomManager.disconnectDebounceTimers.delete(playerId);
+    console.log(`玩家 ${playerId} 重新加入游戏会话，取消断线去抖定时器`);
+  }
 
   const player = gameSession.players.get(playerId);
   let wasDisconnected = false;

@@ -38,8 +38,9 @@ class Animation {
         // 添加跳跃延迟效果
         await new Promise(resolve => setTimeout(resolve, 200));
 
-        // 先检查跳子路径中是否有叠子
-        const stackInPath = this.utils.checkStackInJumpPath(player, startPosition, targetPosition, this.gameState);
+        // 先检查跳子路径中是否有叠子（欢乐模式不阻挡）
+        const isHappyMode = this.gameState.isHappyMode && this.gameState.isHappyMode();
+        const stackInPath = !isHappyMode ? this.utils.checkStackInJumpPath(player, startPosition, targetPosition, this.gameState) : null;
         // 捕获本次跳子是否由遥控/道具骰子触发
         const isRemoteDiceMove = this.gameState.isRemoteDice === true;
         // 检查是否为网络回放模式

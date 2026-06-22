@@ -424,6 +424,34 @@ class MultiplayerManager {
             });
         }
 
+        // 欢乐模式复选框事件
+        const happyModeCheckbox = document.getElementById('happyModeCheckbox');
+        if (happyModeCheckbox) {
+            happyModeCheckbox.addEventListener('change', (e) => {
+                if (this.isHost && this.wsClient) {
+                    const happyMode = e.target.checked;
+                    // 立即更新本地房间设置
+                    if (!this.currentRoom) {
+                        this.currentRoom = { settings: {} };
+                    }
+                    if (!this.currentRoom.settings) {
+                        this.currentRoom.settings = {};
+                    }
+                    this.currentRoom.settings.happyMode = happyMode;
+
+                    // 发送配置更新到服务器
+                    this.wsClient.sendMessage('updateSettings', {
+                        settings: {
+                            happyMode: happyMode
+                        }
+                    });
+
+                    // 立即更新房间信息显示
+                    this.updateRoomInfo();
+                }
+            });
+        }
+
         const roomPrivacyPublicBtn = document.getElementById('roomPrivacyPublicBtn');
         const roomPrivacyPrivateBtn = document.getElementById('roomPrivacyPrivateBtn');
         if (roomPrivacyPublicBtn && roomPrivacyPrivateBtn) {
@@ -1278,6 +1306,12 @@ class MultiplayerManager {
                         skillModeCheckbox.checked = roomData.settings.skillMode || false;
                         console.log('[配置] 创建房间时初始化道具模式:', roomData.settings.skillMode);
                     }
+                    // 同步欢乐模式复选框状态
+                    const happyModeCheckbox = document.getElementById('happyModeCheckbox');
+                    if (happyModeCheckbox && roomData.settings) {
+                        happyModeCheckbox.checked = roomData.settings.happyMode || false;
+                        console.log('[配置] 创建房间时初始化欢乐模式:', roomData.settings.happyMode);
+                    }
                     this.updateRoomPrivacyToggleUI(!!roomData.isPrivate);
 
                     // 确保房主颜色选择器正确高亮
@@ -1445,6 +1479,12 @@ class MultiplayerManager {
                 if (skillModeCheckbox && data.room.settings) {
                     skillModeCheckbox.checked = data.room.settings.skillMode || false;
                     console.log('[配置] 加入房间时同步道具模式:', data.room.settings.skillMode);
+                }
+                // 同步欢乐模式复选框状态
+                const happyModeCheckbox = document.getElementById('happyModeCheckbox');
+                if (happyModeCheckbox && data.room.settings) {
+                    happyModeCheckbox.checked = data.room.settings.happyMode || false;
+                    console.log('[配置] 加入房间时同步欢乐模式:', data.room.settings.happyMode);
                 }
 
                 // 恢复棋子个数显示
@@ -2058,6 +2098,12 @@ class MultiplayerManager {
                     skillModeCheckbox.checked = data.settings.skillMode;
                     console.log('[配置] 道具模式复选框已更新:', data.settings.skillMode);
                 }
+                // 更新欢乐模式复选框状态
+                const happyModeCheckbox = document.getElementById('happyModeCheckbox');
+                if (happyModeCheckbox && data.settings.happyMode !== undefined) {
+                    happyModeCheckbox.checked = data.settings.happyMode;
+                    console.log('[配置] 欢乐模式复选框已更新:', data.settings.happyMode);
+                }
 
                 // 更新房间信息显示（包括游戏配置）
                 this.updateRoomInfo();
@@ -2183,7 +2229,17 @@ class MultiplayerManager {
 
             const mode = document.createElement('div');
             mode.className = 'public-room-mode';
-            mode.textContent = room.skillMode ? '道具' : '标准';
+            const skillMode = room.skillMode;
+            const happyMode = room.happyMode;
+            if (happyMode && skillMode) {
+                mode.textContent = '道欢';
+            } else if (happyMode) {
+                mode.textContent = '欢乐';
+            } else if (skillMode) {
+                mode.textContent = '道具';
+            } else {
+                mode.textContent = '标准';
+            }
 
             const pieceCount = document.createElement('div');
             pieceCount.className = 'public-room-piece-count';
@@ -3046,7 +3102,18 @@ class MultiplayerManager {
                 ? this.currentRoom.settings.pieceCount : 4;
             const skillMode = (this.currentRoom && this.currentRoom.settings && this.currentRoom.settings.skillMode)
                 ? this.currentRoom.settings.skillMode : false;
-            const modeText = skillMode ? '道具模式' : '标准模式';
+            const happyMode = (this.currentRoom && this.currentRoom.settings && this.currentRoom.settings.happyMode)
+                ? this.currentRoom.settings.happyMode : false;
+            let modeText;
+            if (happyMode && skillMode) {
+                modeText = '道具欢乐';
+            } else if (happyMode) {
+                modeText = '欢乐模式';
+            } else if (skillMode) {
+                modeText = '道具模式';
+            } else {
+                modeText = '标准模式';
+            }
             gameConfigInfo.textContent = `${pieceCount}棋子 - ${modeText}`;
         }
 
@@ -4124,12 +4191,19 @@ class MultiplayerManager {
             : (this.currentRoom?.settings?.skillMode || false);
         console.log('[配置] 道具模式:', skillModeEnabled, '(isHost:', this.isHost, ')');
 
+        // 读取欢乐模式设置
+        const happyModeEnabled = gameData.happyMode !== undefined
+            ? gameData.happyMode
+            : (this.currentRoom?.settings?.happyMode || false);
+        console.log('[配置] 欢乐模式:', happyModeEnabled, '(isHost:', this.isHost, ')');
+
         // 设置正确的gameConfig，确保按钮显示正确
         const gameConfig = {
             mode: 'online_multiplayer',
             playerCount: allPlayers.length,
             pieceCount: gameData.pieceCount || 4,
-            skillMode: skillModeEnabled // 使用读取到的道具模式配置
+            skillMode: skillModeEnabled,
+            happyMode: happyModeEnabled
         };
 
         console.log('[配置] 最终保存的gameConfig:', gameConfig);
@@ -4143,6 +4217,7 @@ class MultiplayerManager {
             gameSessionId: gameSessionId, // 使用服务器传来的游戏会话ID
             isHost: this.isHost,
             skillMode: skillModeEnabled, // 明确添加道具模式配置
+            happyMode: happyModeEnabled, // 明确添加欢乐模式配置
             wsClient: {
                 playerId: this.wsClient.playerId,
                 serverUrl: this.wsClient.serverUrl

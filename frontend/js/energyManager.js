@@ -52,6 +52,22 @@ class EnergyManager {
         if (this.skillModeEnabled) {
             this.resetAllEnergy();
         }
+
+        // 更新提示文字
+        this._updateHintText();
+    }
+
+    /**
+     * 更新技能面板提示文字
+     */
+    _updateHintText() {
+        const hintEl = document.querySelector('.skill-energy-hint');
+        if (!hintEl) return;
+        if (typeof gameState?.isHappyMode === 'function' && gameState.isHappyMode()) {
+            hintEl.textContent = '碰撞敌人来获取积分';
+        } else {
+            hintEl.textContent = '击败玩家来获取积分';
+        }
     }
 
     /**
@@ -101,7 +117,7 @@ class EnergyManager {
      * 增加玩家积分
      * @param {number} player - 玩家编号
      * @param {number} amount - 增加的积分值
-     * @param {string} source - 积分来源 ('kill', 'mysteryBox')
+     * @param {string} source - 积分来源 ('kill', 'mysteryBox', 'happy_bonus')
      * @param {number} targetPlayer - 被击败的玩家（可选）
      * @param {number} targetChessIndex - 被击败的棋子索引（可选）
      * @param {number} delay - 粒子动画延迟（可选）
@@ -165,6 +181,17 @@ class EnergyManager {
                         this.energyDisplay.triggerFullEnergyEffect(player);
                     }
                 }
+            } else if (source === 'happy_bonus' && targetPlayer !== null && targetChessIndex !== null) {
+                // 欢乐模式碰撞奖励：从被碰撞棋子位置发射粒子
+                const startSource = this.energyDisplay.getChessCenterPosition(targetPlayer, targetChessIndex) || targetPlayer;
+                this.energyDisplay.playEnergyParticles(startSource, targetChessIndex, player, () => {
+                    this.energyDisplay.updateEnergyBar(player, this.playerEnergy[player]);
+                    this.energyDisplay.showEnergyGainAnimation(player, amount);
+
+                    if (this.isEnergyFull(player) && oldEnergy < this.maxEnergy) {
+                        this.energyDisplay.triggerFullEnergyEffect(player);
+                    }
+                }, amount);
             } else {
                 this.energyDisplay.updateEnergyBar(player, this.playerEnergy[player]);
                 this.energyDisplay.showEnergyGainAnimation(player, amount);
@@ -210,6 +237,15 @@ class EnergyManager {
 
         // 调用基础方法增加积分，设置来源为 'kill'
         this.addEnergy(player, energyGain, 'kill', targetPlayer, targetChessIndex, delay);
+    }
+
+    /**
+     * 欢乐模式碰撞奖励积分
+     */
+    addBonusEnergy(player, amount, targetPlayer = null, targetChessIndex = null) {
+        if (!this.skillModeEnabled) return;
+        // 从碰撞的棋子位置发射粒子
+        this.addEnergy(player, amount, 'happy_bonus', targetPlayer, targetChessIndex, 0);
     }
 
     /**

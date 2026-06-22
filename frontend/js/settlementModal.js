@@ -123,6 +123,9 @@ class SettlementModal {
         // 渲染排名列表
         this.renderRankings(rankingsData);
 
+        // 结算弹框模式标记
+        this._updateModeLabel();
+
         // 更新时间戳
         this.updateTimestamp();
 
@@ -186,6 +189,9 @@ class SettlementModal {
 
         // 渲染排名列表
         this.renderRankings(rankingsData);
+
+        // 结算弹框模式标记
+        this._updateModeLabel();
 
         // 更新时间戳
         this.updateTimestamp();
@@ -1019,6 +1025,25 @@ class SettlementModal {
             // 显示游戏用时
             const gameDuration = this.gameState.getFormattedGameDuration();
             durationElement.textContent = `${gameDuration}`;
+        }
+    }
+
+    /**
+     * 更新结算弹框的模式标记
+     */
+    _updateModeLabel() {
+        const modeEl = document.getElementById('settlement-mode');
+        if (!modeEl) return;
+        modeEl.textContent = '';
+        if (!this.gameState) return;
+        const isHappy = this.gameState.isHappyMode();
+        const isSkill = window.energyManager?.isSkillModeEnabled();
+        if (isHappy && isSkill) {
+            modeEl.textContent = '道具欢乐';
+        } else if (isHappy) {
+            modeEl.textContent = '欢乐模式';
+        } else if (isSkill) {
+            modeEl.textContent = '道具模式';
         }
     }
 

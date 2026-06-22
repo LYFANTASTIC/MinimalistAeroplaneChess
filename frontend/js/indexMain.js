@@ -1553,6 +1553,8 @@ class PlayerSetup {
         // 获取道具模式开关状态
         const skillModeCheckbox = document.getElementById('aiSkillModeCheckbox');
         const skillMode = skillModeCheckbox ? skillModeCheckbox.checked : false;
+        const happyModeCheckbox = document.getElementById('aiHappyModeCheckbox');
+        const happyMode = happyModeCheckbox ? happyModeCheckbox.checked : false;
 
         // 构建游戏配置
         const gameConfig = {
@@ -1563,7 +1565,8 @@ class PlayerSetup {
             pieceCount: this.selectedPieceCount,
             bots: Array.from(this.activeBots),
             botDifficulties: Object.fromEntries(this.botDifficulties),
-            skillMode: skillMode
+            skillMode: skillMode,
+            happyMode: happyMode
         };
 
         console.log('游戏配置:', gameConfig);
@@ -1605,6 +1608,8 @@ class PlayerSetup {
         // 获取道具模式开关状态
         const skillModeCheckbox = document.getElementById('localSkillModeCheckbox');
         const skillMode = skillModeCheckbox ? skillModeCheckbox.checked : false;
+        const happyModeCheckbox = document.getElementById('localHappyModeCheckbox');
+        const happyMode = happyModeCheckbox ? happyModeCheckbox.checked : false;
 
         // 构建本地多人游戏配置
         const localGameConfig = {
@@ -1612,6 +1617,7 @@ class PlayerSetup {
             playerCount: this.localMultiplayerConfig.playerCount,
             pieceCount: this.localMultiplayerConfig.pieceCount,
             skillMode: skillMode,
+            happyMode: happyMode,
             players: this.localMultiplayerConfig.players.map(player => ({
                 id: player.id,
                 name: player.name.trim(),
@@ -1768,6 +1774,13 @@ class PlayerSetup {
                         console.log('恢复道具模式状态:', config.skillMode);
                     }
                 }
+                // 恢复欢乐模式勾选状态
+                if (config.happyMode !== undefined) {
+                    const happyModeCheckbox = document.getElementById('aiHappyModeCheckbox');
+                    if (happyModeCheckbox) {
+                        happyModeCheckbox.checked = config.happyMode;
+                    }
+                }
 
                 sessionStorage.removeItem('lastAIConfig');
             } catch (error) {
@@ -1838,6 +1851,13 @@ class PlayerSetup {
                     if (skillModeCheckbox) {
                         skillModeCheckbox.checked = config.skillMode;
                         console.log('恢复本地多人道具模式状态:', config.skillMode);
+                    }
+                }
+                // 恢复欢乐模式勾选状态
+                if (config.happyMode !== undefined) {
+                    const happyModeCheckbox = document.getElementById('localHappyModeCheckbox');
+                    if (happyModeCheckbox) {
+                        happyModeCheckbox.checked = config.happyMode;
                     }
                 }
 

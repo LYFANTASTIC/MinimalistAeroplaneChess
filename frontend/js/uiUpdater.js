@@ -146,7 +146,9 @@ class UIUpdater {
             }
 
             if (gamePhase === 'rolling' && !isRolling && gameState.getCanReroll() && gameState.getConsecutiveSixes() === 2) {
-                diceDisplay.classList.add('dice-penalty-warning');
+                if (!gameState.isHappyMode()) {
+                    diceDisplay.classList.add('dice-penalty-warning');
+                }
             } else {
                 diceDisplay.classList.remove('dice-penalty-warning');
             }

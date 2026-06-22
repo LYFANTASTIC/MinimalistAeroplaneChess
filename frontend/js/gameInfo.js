@@ -169,6 +169,14 @@ class GameInfo {
              }
         }
 
+        // 道具欢乐模式：碰撞奖励消息不再重复显示，由 energy_gain 代替
+        if (type === 'collision_bonus') {
+            const isSkillModeForList = window.gameInstance?.energyManager?.isSkillModeEnabled();
+            if (isSkillModeForList) {
+                isSkipList = true;
+            }
+        }
+
         if (type === 'skill_usage' && messageData.data.skillName === '盲盒') {
             isSkipList = true;
         }
@@ -227,8 +235,27 @@ class GameInfo {
                     notificationText = '';
                 }
             }
+        } else if (type === 'collision_bonus') {
+            // 欢乐模式碰撞奖励通知（道具模式下由 energy_gain 显示，这里不重复）
+            const isSkillMode = window.gameInstance?.energyManager?.isSkillModeEnabled();
+            if (!isSkillMode) {
+                notificationText = this.formatCollisionBonus(player, messageData.data);
+            } else {
+                notificationText = '';
+            }
         } else if (type === 'energy_gain') {
-            if (messageData.data.source !== 'kill' && !isNonLocal) {
+            if (messageData.data.source === 'happy_bonus') {
+                // 道具欢乐模式：碰撞 + 积分，格式同击杀，只是"击败"换成"碰撞"
+                const amountStr = Number.isInteger(messageData.data.amount) ? messageData.data.amount : messageData.data.amount.toFixed(1);
+                const playerName = this.getPlayerName(player);
+                const playerSpan = `<span class="player-text player-${player}">${playerName}</span>`;
+                const energySpan = `<span class="energy-value-text">+${amountStr}积分</span>`;
+                const targetPlayer = messageData.data.targetPlayer;
+                const hasTarget = targetPlayer !== undefined && targetPlayer !== null;
+                const targetName = hasTarget ? this.getPlayerName(targetPlayer) : '对手';
+                const targetSpan = hasTarget ? `<span class="player-text player-${targetPlayer}">${targetName}</span>` : `<span class="action-text">对手</span>`;
+                notificationText = `${playerSpan}<span class="beat-text"> 碰撞 </span>${targetSpan} ${energySpan}`;
+            } else if (messageData.data.source !== 'kill' && !isNonLocal) {
                 notificationText = '';
             } else {
                 const amountStr = Number.isInteger(messageData.data.amount) ? messageData.data.amount : messageData.data.amount.toFixed(1);
@@ -248,7 +275,7 @@ class GameInfo {
                     notificationText = `${playerSpan}<span class="action-text"> 获得 </span>${energySpan}`;
                 }
             }
-        } else if (type !== 'skill_usage' && type !== 'energy_gain' && type !== 'chess_beat' && type !== 'stack_collision' && type !== 'three_sixes_penalty' && type !== 'chess_finish') {
+        } else if (type !== 'skill_usage' && type !== 'energy_gain' && type !== 'chess_beat' && type !== 'collision_bonus' && type !== 'stack_collision' && type !== 'three_sixes_penalty' && type !== 'chess_finish') {
             notificationText = '';
         }
 
@@ -306,6 +333,9 @@ class GameInfo {
 
             case 'consecutive_bonus':
                 return this.formatConsecutiveBonus(player);
+
+            case 'collision_bonus':
+                return this.formatCollisionBonus(player, data);
 
             case 'stack_formation':
                 return this.formatStackFormation(player);
@@ -395,6 +425,9 @@ class GameInfo {
                 break;
             case 'fly':
                 moveTypeSpan = `<span class="move-type-fly">[飞棋]</span>`;
+                break;
+            case 'bonus':
+                moveTypeSpan = `<span class="move-type-bonus">[奖励]</span>`;
                 break;
             default:
                 moveTypeSpan = `<span class="move-type-move">[移动]</span>`;
@@ -570,6 +603,16 @@ class GameInfo {
         return `${playerSpan}${actionSpan}${bonusSpan}`;
     }
 
+    // 格式化碰撞奖励消息
+    formatCollisionBonus(player) {
+        const playerName = this.getPlayerName(player);
+        const playerSpan = `<span class="player-text player-${player}">${playerName}</span>`;
+        const actionSpan = `<span class="action-text"> 获得</span>`;
+        const bonusSpan = `<span class="collision-bonus"> [碰撞奖励]</span>`;
+
+        return `${playerSpan}${actionSpan}${bonusSpan}`;
+    }
+
     // 格式化叠子形成消息
     formatStackFormation(player) {
         const playerName = this.getPlayerName(player);
@@ -730,6 +773,15 @@ class GameInfo {
             type: 'consecutive_bonus',
             player: player,
             data: {}
+        });
+    }
+
+    // 便捷方法：添加碰撞奖励信息
+    addCollisionBonus(player, targetPlayer) {
+        this.addMessage({
+            type: 'collision_bonus',
+            player: player,
+            data: { targetPlayer }
         });
     }
 
