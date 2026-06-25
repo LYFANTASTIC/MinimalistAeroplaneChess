@@ -1719,7 +1719,7 @@ class MultiplayerGameManager {
      * 处理传送门图标显示同步
      */
     handleTeleportIcon(data) {
-        if (data.playerId === this.playerId) return; // 忽略自己的消息
+        if (String(data.playerId) === String(this.playerId)) return; // 忽略自己的消息
 
         if (data.show) {
             const playerNumber = this.getPlayerNumberByPlayerId(data.playerId);
@@ -1747,7 +1747,7 @@ class MultiplayerGameManager {
      * 处理多面骰子显示同步
      */
     handlePolyhedralDice(data) {
-        if (data.playerId === this.playerId) return; // 忽略自己的消息
+        if (String(data.playerId) === String(this.playerId)) return; // 忽略自己的消息
 
         const playerNumber = data.playerNumber || this.getPlayerNumberByPlayerId(data.playerId);
         console.log(`[同步] 玩家${playerNumber}使用多面骰子: ${data.diceValue}`);
@@ -1780,7 +1780,7 @@ class MultiplayerGameManager {
      * 处理盲盒图标显示同步
      */
     handleMysteryBoxIcon(data) {
-        if (data.playerId === this.playerId) return; // 忽略自己的消息
+        if (String(data.playerId) === String(this.playerId)) return; // 忽略自己的消息
 
         // 更新 titleStats（远程玩家的盲盒称号数据）
         const playerNumber = data.playerNumber || this.getPlayerNumberByPlayerId(data.playerId);
@@ -1811,7 +1811,7 @@ class MultiplayerGameManager {
      * 处理移除盲盒图标同步
      */
     handleRemoveMysteryBoxIcon(data) {
-        if (data.playerId === this.playerId) return; // 忽略自己的消息
+        if (String(data.playerId) === String(this.playerId)) return; // 忽略自己的消息
 
         if (this.gameInstance && this.gameInstance.skillManager) {
             this.gameInstance.skillManager.removeMysteryBoxIcon();
@@ -1822,7 +1822,7 @@ class MultiplayerGameManager {
      * 处理积分数值动画同步
      */
     handleEnergyGainAnimation(data) {
-        if (data.playerId === this.playerId) return; // 忽略自己的消息
+        if (String(data.playerId) === String(this.playerId)) return; // 忽略自己的消息
         const playerNumber = data.player !== undefined ? data.player : this.getPlayerNumberByPlayerId(data.playerId);
 
         if (this.gameInstance && this.gameInstance.skillManager) {
@@ -1921,7 +1921,7 @@ class MultiplayerGameManager {
         }
 
         // 忽略自己发送的消息（已经在本地处理过了，后续的游戏状态更新逻辑由发起者在本地完成）
-        if (data.playerId === this.playerId) {
+        if (String(data.playerId) === String(this.playerId)) {
             return;
         }
 
@@ -2109,7 +2109,7 @@ class MultiplayerGameManager {
      * 处理棋子移动同步
      */
     handleChessMove(data) {
-        if (data.playerId === this.playerId) return; // 忽略自己的消息
+        if (String(data.playerId) === String(this.playerId)) return; // 忽略自己的消息
 
         // 记录上一次同步移动的棋子，避免重复打印（因为逐格移动会发送多条消息）
         if (this._lastSyncedMove?.player !== data.player || this._lastSyncedMove?.chessIndex !== data.chessIndex) {
@@ -2269,7 +2269,7 @@ class MultiplayerGameManager {
      * 处理整回合移动开始消息（其他玩家的意图同步）：本地重算并播放动画
      */
     async handleFullMoveStart(data) {
-        if (data.playerId === this.playerId) return;
+        if (String(data.playerId) === String(this.playerId)) return;
 
         console.log(`[FullMoveStart] 玩家${data.player} 棋子${data.chessIndex} 骰子${data.diceValue} 起始位置${data.fromPosition}`);
 
@@ -2327,7 +2327,7 @@ class MultiplayerGameManager {
      * 处理整回合移动最终结果（兜底校验）：用权威状态覆盖本地状态
      */
     handleFinalMoveResult(data) {
-        if (data.playerId === this.playerId) return;
+        if (String(data.playerId) === String(this.playerId)) return;
 
         console.log(`[FinalMoveResult] 玩家${data.player} 棋子${data.chessIndex} 最终位置${data.finalPosition}`);
 
@@ -2402,7 +2402,7 @@ class MultiplayerGameManager {
      * 处理棋盘状态同步
      */
     handleBoardState(data) {
-        if (data.playerId === this.playerId) return; // 忽略自己的消息
+        if (String(data.playerId) === String(this.playerId)) return; // 忽略自己的消息
 
         console.log('同步棋盘状态:', data.boardState);
 
@@ -2480,7 +2480,7 @@ class MultiplayerGameManager {
      * 处理接收到的积分变化
      */
     async handleEnergyChange(data) {
-        if (data.playerId === this.playerId) return; // 忽略自己的消息
+        if (String(data.playerId) === String(this.playerId)) return; // 忽略自己的消息
 
         // 导入积分管理器
         const { energyManager } = await import('./energyManager.js');
@@ -2573,7 +2573,7 @@ class MultiplayerGameManager {
      * 处理接收到的击败计数变化
      */
     async handleDefeatCountChange(data) {
-        if (data.playerId === this.playerId) return; // 忽略自己的消息
+        if (String(data.playerId) === String(this.playerId)) return; // 忽略自己的消息
 
         // 更新本地gameState中的击败计数
         if (window.gameState) {
@@ -2811,7 +2811,7 @@ class MultiplayerGameManager {
      */
     handleNoMovableChess(data) {
         // 忽略自己发送的消息（避免重复显示）
-        if (data.playerId === this.playerId && !this.isSpectator) {
+        if (String(data.playerId) === String(this.playerId) && !this.isSpectator) {
             return;
         }
 
@@ -3070,7 +3070,7 @@ class MultiplayerGameManager {
      * 处理跳子动画同步
      */
     handleJumpAnimation(data) {
-        if (data.playerId === this.playerId && !this.isSpectator) return; // 忽略自己的消息
+        if (String(data.playerId) === String(this.playerId) && !this.isSpectator) return; // 忽略自己的消息
 
         console.log(`[同步] 玩家${data.player}的棋子${data.chessIndex}触发跳跃`);
 
@@ -3113,7 +3113,7 @@ class MultiplayerGameManager {
      * 处理飞棋动画同步
      */
     handleFlyAnimation(data) {
-        if (data.playerId === this.playerId && !this.isSpectator) return; // 忽略自己的消息
+        if (String(data.playerId) === String(this.playerId) && !this.isSpectator) return; // 忽略自己的消息
 
         console.log(`[同步] 玩家${data.player}的棋子${data.chessIndex}触发飞行`);
 
@@ -3158,7 +3158,7 @@ class MultiplayerGameManager {
      * 处理棋子回归起点动画同步
      */
     handleMoveChessToStart(data) {
-        if (data.playerId === this.playerId && !this.isSpectator) return; // 忽略自己的消息
+        if (String(data.playerId) === String(this.playerId) && !this.isSpectator) return; // 忽略自己的消息
 
         // 如果正在回放模式，延迟重试，等待回放完成
         if (this.gameInstance?.chessPiece?._isNetworkReplayMode) {
@@ -3200,7 +3200,7 @@ class MultiplayerGameManager {
      * 处理棋子到达终点动画同步
      */
     handleMoveChessToFinish(data) {
-        if (data.playerId === this.playerId && !this.isSpectator) return; // 忽略自己的消息
+        if (String(data.playerId) === String(this.playerId) && !this.isSpectator) return; // 忽略自己的消息
 
         console.log(`同步棋子到达终点动画: 玩家${data.player}的棋子${data.chessIndex}`);
 
@@ -3255,7 +3255,7 @@ class MultiplayerGameManager {
      * 处理叠子反弹同步
      */
     async handleStackBounce(data) {
-        if (data.playerId === this.playerId && !this.isSpectator) return; // 忽略自己的消息，因为本地已经执行了动画
+        if (String(data.playerId) === String(this.playerId) && !this.isSpectator) return; // 忽略自己的消息，因为本地已经执行了动画
 
         console.log(`处理叠子反弹同步: 玩家${data.player}的棋子${data.chessIndex}从位置${data.startPosition}反弹到${data.endPosition}`);
 
@@ -3320,7 +3320,7 @@ class MultiplayerGameManager {
      * 处理终点反弹同步
      */
     async handleEndpointBounce(data) {
-        if (data.playerId === this.playerId && !this.isSpectator) {
+        if (String(data.playerId) === String(this.playerId) && !this.isSpectator) {
             return; // 忽略自己的消息，因为本地已经执行了动画
         }
 
@@ -3468,7 +3468,7 @@ class MultiplayerGameManager {
     handleGameEnd(data) {
         // 自己发送的消息也需要处理（用于同步服务器权威数据，如progressHistory/gameStartTime等），
         // 但要避免重复弹出结算模态框。
-        const isSelfMessage = data.playerId === this.playerId;
+        const isSelfMessage = String(data.playerId) === String(this.playerId);
 
         console.log(`处理游戏结束同步: 玩家${data.winnerPlayer}获胜`);
 
@@ -3590,7 +3590,7 @@ class MultiplayerGameManager {
     handleForceSettlement(data) {
         // 自己发送的消息也需要处理（用于同步服务器权威数据，如progressHistory/gameStartTime等），
         // 但要避免重复弹出结算模态框。
-        const isSelfMessage = data.playerId === this.playerId;
+        const isSelfMessage = String(data.playerId) === String(this.playerId);
 
         console.log(`处理强制结算同步:`, data.rankings);
 
@@ -4023,7 +4023,7 @@ class MultiplayerGameManager {
      */
     handleGameInfo(data) {
         // 如果是自己发送的消息，跳过处理，避免重复显示
-        if (data.playerId === this.playerId) {
+        if (String(data.playerId) === String(this.playerId)) {
             return;
         }
 
@@ -4385,7 +4385,7 @@ class MultiplayerGameManager {
             }
 
             // 如果是被托管的玩家本身，更新其本地UI（按钮状态、网页标题等）
-            if (data.playerId === this.playerId) {
+            if (String(data.playerId) === String(this.playerId)) {
                 if (window.aiTakeoverManager && typeof window.aiTakeoverManager.applyRemoteTakeoverState === 'function') {
                     window.aiTakeoverManager.applyRemoteTakeoverState(data.isActive);
                 }
@@ -4654,7 +4654,7 @@ class MultiplayerGameManager {
      */
     handleDiceReset(data) {
         // 忽略自己发送的消息
-        if (data.playerId === this.playerId) {
+        if (String(data.playerId) === String(this.playerId)) {
             return;
         }
 
@@ -4818,7 +4818,7 @@ class MultiplayerGameManager {
             }
         }
 
-        if (data.playerId === this.playerId && data.gameSession?.gameState === 'playing') {
+        if (String(data.playerId) === String(this.playerId) && data.gameSession?.gameState === 'playing') {
             if (this.isReconnecting || this._didDisconnectOnce) {
                 console.log('检测到自己重连到进行中的游戏，检查音频加载状态');
             }
@@ -4862,7 +4862,7 @@ class MultiplayerGameManager {
 
         // 自己重连：如果本地仍处于AI托管，主动向服务器重新同步一次。
         // 否则其他客户端只会看到昵称【Bot】（本地渲染）而收不到托管状态，导致操作权限/标记不同步。
-        if (data.playerId === this.playerId) {
+        if (String(data.playerId) === String(this.playerId)) {
             try {
                 const localTakeoverActive = !!(window.gameState && typeof window.gameState.getIsAITakeover === 'function' && window.gameState.getIsAITakeover());
                 if (localTakeoverActive && this.isConnected) {

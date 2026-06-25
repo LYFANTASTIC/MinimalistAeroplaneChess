@@ -99,6 +99,12 @@ class SettlementModal {
     show(winnerPlayer) {
         if (!this.modal || !this.gameState) return;
 
+        // 防止重复调用（避免双音效和重复渲染）
+        if (this.isVisible()) {
+            console.log('[结算] show() 被重复调用，已跳过');
+            return;
+        }
+
         // 确保结算时至少保存一次完成度快照，避免折线图为空
         if (typeof this.gameState.saveProgressSnapshot === 'function') {
             try {
@@ -157,6 +163,12 @@ class SettlementModal {
      */
     showWithRankings(rankings) {
         if (!this.modal) return;
+
+        // 防止重复调用
+        if (this.isVisible()) {
+            console.log('[结算] showWithRankings() 被重复调用，已跳过');
+            return;
+        }
 
         // 确保结算时至少保存一次完成度快照，避免折线图为空
         if (this.gameState && typeof this.gameState.saveProgressSnapshot === 'function') {
@@ -1044,6 +1056,8 @@ class SettlementModal {
             modeEl.textContent = '欢乐模式';
         } else if (isSkill) {
             modeEl.textContent = '道具模式';
+        } else {
+            modeEl.textContent = '经典模式';
         }
     }
 

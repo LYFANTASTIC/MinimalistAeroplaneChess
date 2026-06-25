@@ -924,11 +924,9 @@ document.addEventListener('DOMContentLoaded', () => {
         // 联机模式：显示房间号
         if (roomCodeDisplay && roomCodeElement) {
             roomCodeElement.textContent = roomCode;
-            roomCodeDisplay.style.display = 'block';
         }
         if (roomCodeDisplayColumn && roomCodeElementColumn) {
             roomCodeElementColumn.textContent = roomCode;
-            roomCodeDisplayColumn.style.display = 'block';
         }
         if (controlTitle) {
             controlTitle.style.display = 'block';

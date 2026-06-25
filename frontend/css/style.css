@@ -2027,7 +2027,7 @@ use[href="#checkmark"] {
     margin: 0 10%;
     border: 2px solid #7ca4b1;
     border-radius: 20px;
-    display: inline-block;
+    display: block;
     letter-spacing: 0.5px;
 }
 
@@ -3734,6 +3734,18 @@ use[href="#checkmark"] {
     padding: 2px 8px;
     border-radius: 4px;
     background: rgba(255, 255, 255, 0.08);
+}
+
+/* 窄屏结算弹框：模式独占一行，时间戳和用时靠左挨在一起 */
+@media (max-width: 520px) {
+    .settlement-info {
+        flex-wrap: wrap;
+        justify-content: flex-start;
+        gap: 4px 10px;
+    }
+    .settlement-mode {
+        flex: 0 0 100%;
+    }
 }
 
 .modal-close {
@@ -6834,6 +6846,7 @@ use[href="#checkmark"] {
 
     .modal-header h2 {
         font-size: 18px;
+        white-space: nowrap;
     }
 
     .settlement-rankings {

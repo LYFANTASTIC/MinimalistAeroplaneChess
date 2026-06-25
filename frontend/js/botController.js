@@ -1221,6 +1221,9 @@ class BotController {
      * 检查是否到达终点
      */
     isFinishPosition(player, position) {
+        if (gameState.isHappyMode()) {
+            return position >= 56;
+        }
         return position === 56;
     }
 
@@ -1228,6 +1231,13 @@ class BotController {
      * 检查反弹
      */
     checkBounce(player, currentPosition, diceValue) {
+        if (gameState.isHappyMode()) {
+            return {
+                willBounce: false,
+                finalPosition: currentPosition + diceValue
+            };
+        }
+
         const targetPosition = currentPosition + diceValue;
 
         // 只有在终点通道（位置51-56）才会发生反弹
