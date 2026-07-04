@@ -4699,7 +4699,9 @@ use[href="#checkmark"] {
 }
 
 .game-config-info {
-    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     color: rgba(45, 36, 31, 0.85);
     font-size: 14px;
     padding-top: 5px;
@@ -5159,12 +5161,12 @@ use[href="#checkmark"] {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 18px;
-    height: 18px;
+    width: 15px;
+    height: 15px;
     border-radius: 50%;
     background: #aaa;
     color: #fff;
-    font-size: 12px;
+    font-size: 10px;
     font-weight: bold;
     cursor: pointer;
     line-height: 1;

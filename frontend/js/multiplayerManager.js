@@ -3115,6 +3115,29 @@ class MultiplayerManager {
                 modeText = '标准模式';
             }
             gameConfigInfo.textContent = `${pieceCount}棋子 - ${modeText}`;
+
+            // 非标准模式：在右侧添加问号图标打开规则说明
+            const isStandard = !happyMode && !skillMode;
+            const existingHelp = gameConfigInfo.querySelector('.config-mode-help');
+            if (!isStandard) {
+                if (!existingHelp) {
+                    const helpIcon = document.createElement('span');
+                    helpIcon.className = 'config-mode-help toggle-group-help';
+                    helpIcon.textContent = '?';
+                    helpIcon.style.marginLeft = '6px';
+                    helpIcon.onclick = (e) => {
+                        e.stopPropagation();
+                        if (typeof showModeRulesModal === 'function') {
+                            showModeRulesModal();
+                        }
+                    };
+                    gameConfigInfo.appendChild(helpIcon);
+                }
+            } else {
+                if (existingHelp) {
+                    existingHelp.remove();
+                }
+            }
         }
 
         this.updateConfigHeaderTitle();

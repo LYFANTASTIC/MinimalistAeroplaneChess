@@ -532,7 +532,15 @@ class Room {
     for (const player of this.players.values()) {
       // 排除AI玩家，只检查人类玩家
       if (!player.isAI && player.isConnected) {
-        return true;
+        // 交叉验证：确认该玩家确实有真实的 WebSocket 连接
+        const ws = roomManager.getPlayerConnection(player.id);
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          return true;
+        }
+        // 有 isConnected 标记但没有真实连接 → 标记已断开
+        player.isConnected = false;
+        player.ws = null;
+        player.disconnectedAt = player.disconnectedAt || Date.now();
       }
     }
     return false;
@@ -940,8 +948,10 @@ function handlePlayerDisconnect(playerId) {
     }
   }
 
-  // 如果在游戏会话中处理过，就结束
+  // 如果在游戏会话中处理过，就结束（但先清理 playerRooms 和 playerSessions 映射）
   if (handledInSession) {
+    roomManager.playerRooms.delete(playerId);
+    roomManager.playerSessions.delete(playerId);
     return;
   }
 
