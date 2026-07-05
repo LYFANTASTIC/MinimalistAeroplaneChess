@@ -4,6 +4,7 @@
 
 import { reconnectManager } from './reconnectManager.js';
 import { activePlayerManager } from './activePlayerManager.js';
+import { playerIdManager } from './playerIdManager.js';
 
 // 声明全局变量，这些变量在游戏运行时会被设置
 let gameState, uiUpdater, gameInfo;
@@ -161,7 +162,7 @@ class MultiplayerGameManager {
             multiplayerGameData.wsClient = new window.WebSocketClient();
         }
 
-        this.playerId = multiplayerGameData.isSpectator ? ('spectator_' + Date.now()) : multiplayerGameData.wsClient.playerId;
+        this.playerId = multiplayerGameData.isSpectator ? multiplayerGameData.wsClient?.playerId || playerIdManager.getPlayerId() : multiplayerGameData.wsClient.playerId;
         this.serverUrl = multiplayerGameData.wsClient?.serverUrl || ''; // 保存服务器URL
         this.isOnlineMode = true; // 设置为联机模式
         this.hasPrintedGameStart = false; // 跟踪是否已经打印过游戏开始消息
