@@ -15,7 +15,6 @@ class AdminPanel {
 
     init() {
         // 绑定事件
-        document.getElementById('refreshBtn').addEventListener('click', () => this.fetchAllData());
         document.getElementById('autoRefresh').addEventListener('change', (e) => {
             this.autoRefreshEnabled = e.target.checked;
             if (this.autoRefreshEnabled) {
@@ -50,20 +49,21 @@ class AdminPanel {
 
     async fetchAllData() {
         try {
-            // 获取统计、房间数据和在线用户数据
-            const [statsData, roomsData, onlineUsersData] = await Promise.all([
+            // 获取统计、房间、在线用户和每日数据
+            const [statsData, roomsData, onlineUsersData, dailyStats] = await Promise.all([
                 this.fetchStats(),
                 this.fetchRooms(),
-                this.fetchOnlineUsers()
+                this.fetchOnlineUsers(),
+                this.fetchDailyStats()
             ]);
 
             // 更新界面
             this.updateStats(statsData);
             this.updateCombinedTable(roomsData);
             this.updateOnlineUsers(onlineUsersData);
+            this.updateDailyStats(dailyStats);
 
-            // 更新时间戳
-            this.updateLastUpdateTime();
+            // 更新服务器状态
             this.setServerStatus('online');
         } catch (error) {
             console.error('获取数据失败:', error);
@@ -328,16 +328,28 @@ class AdminPanel {
         return phaseMap[phase] || phase;
     }
 
-    updateLastUpdateTime() {
-        const now = new Date();
-        const timeStr = now.toLocaleTimeString('zh-CN');
-        document.getElementById('lastUpdate').textContent = timeStr;
-    }
-
     setServerStatus(status) {
         const statusEl = document.getElementById('serverStatus');
         statusEl.className = `status-value ${status}`;
         statusEl.textContent = status === 'online' ? '在线' : '离线';
+    }
+
+    async fetchDailyStats() {
+        const url = `${this.apiBaseUrl}/api/daily-stats`;
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        const data = await response.json();
+        return data;
+    }
+
+    updateDailyStats(daily) {
+        if (!daily) return;
+        document.getElementById('statGames').textContent = `对局 ${daily.gamesPlayed || 0}`;
+        document.getElementById('statFinished').textContent = `完赛 ${daily.gamesFinished || 0}`;
+        document.getElementById('statPlayers').textContent = `玩家 ${daily.uniquePlayers || 0}`;
+        document.getElementById('statPeak').textContent = `峰值 ${daily.peakOnline || 0}`;
     }
 }
 

@@ -12,20 +12,27 @@
     <div class="admin-container">
         <header class="admin-header">
             <h1>极简飞行棋管理面板</h1>
+                    <!-- 今日统计 -->
+        <div class="daily-stats" id="dailyStats">
+            <span class="daily-stats-label">今日</span>
+            <span class="daily-stat" id="statGames">对局 0</span>
+            <span class="daily-stat-divider">｜</span>
+            <span class="daily-stat" id="statFinished">完赛 0</span>
+            <span class="daily-stat-divider">｜</span>
+            <span class="daily-stat" id="statPlayers">玩家 0</span>
+            <span class="daily-stat-divider">｜</span>
+            <span class="daily-stat" id="statPeak">峰值 0</span>
+        </div>
             <div class="status-bar">
                 <div class="status-item">
                     <span class="status-label">服务器状态</span>
                     <span class="status-value online" id="serverStatus">在线</span>
                 </div>
                 <div class="status-item">
-                    <span class="status-label">最后更新</span>
-                    <span class="status-value" id="lastUpdate">--</span>
-                </div>
-                <div class="status-item">
-                    <button class="refresh-btn" id="refreshBtn">刷新</button>
-                    <label class="auto-refresh-toggle">
+                    <span class="status-label">自动刷新</span>
+                    <label class="toggle-switch">
                         <input type="checkbox" id="autoRefresh" checked>
-                        <span>自动刷新</span>
+                        <span class="toggle-slider"></span>
                     </label>
                 </div>
             </div>

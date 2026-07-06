@@ -320,6 +320,7 @@ class RoomManager {
   // 设置玩家连接
   setPlayerConnection(playerId, ws) {
     this.playerConnections.set(playerId, ws);
+    dailyStats.recordPlayerConnected(playerId);
   }
 
   // 获取玩家连接
@@ -327,6 +328,57 @@ class RoomManager {
     return this.playerConnections.get(playerId);
   }
 }
+
+// -------------------------- 每日统计 --------------------------
+class DailyStats {
+  constructor() {
+    this.reset();
+    // 每日0点自动重置
+    this._scheduleReset();
+  }
+
+  reset() {
+    this.date = new Date().toDateString();
+    this.gamesPlayed = 0;
+    this.gamesFinished = 0;
+    this.peakOnline = 0;
+    this.roomsCreated = 0;
+    this.uniquePlayers = new Set();
+  }
+
+  _scheduleReset() {
+    const now = new Date();
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(0, 0, 0, 0);
+    const msUntilMidnight = tomorrow - now;
+    setTimeout(() => {
+      this.reset();
+      this._scheduleReset();
+    }, msUntilMidnight);
+  }
+
+  recordGameStarted() { this.gamesPlayed++; }
+  recordGameFinished() { this.gamesFinished++; }
+  recordRoomCreated() { this.roomsCreated++; }
+  recordPlayerConnected(playerId) { this.uniquePlayers.add(playerId); }
+
+  recordConnectionCount(count) {
+    if (count > this.peakOnline) this.peakOnline = count;
+  }
+
+  toJSON() {
+    return {
+      gamesPlayed: this.gamesPlayed,
+      gamesFinished: this.gamesFinished,
+      peakOnline: this.peakOnline,
+      roomsCreated: this.roomsCreated,
+      uniquePlayers: this.uniquePlayers.size
+    };
+  }
+}
+
+const dailyStats = new DailyStats();
 
 // -------------------------- 游戏会话类（逻辑保持，优化日志）--------------------------
 class GameSession {
@@ -1636,6 +1688,9 @@ function handleCreateRoom(ws, playerId, message) {
   const player = new Player(playerId, ws, message.data?.nickname, emoji);
   const room = roomManager.createRoom(player);
   ws.send(JSON.stringify({ type: 'roomCreated', room: room.toJSON() }));
+
+  // 每日统计：记录创建房间
+  dailyStats.recordRoomCreated();
 }
 
 function handleJoinRoom(ws, playerId, message) {
@@ -2451,6 +2506,9 @@ function handleStartGame(ws, playerId) {
     happyMode: room.settings.happyMode || false,
     room: room.toJSON()
   });
+
+  // 每日统计：记录游戏开始
+  dailyStats.recordGameStarted();
 }
 
 // 添加AI玩家（需要房主权限）
@@ -3832,6 +3890,9 @@ function handleGameEnd(ws, playerId, message) {
       console.log(`房间 ${room.code} 游戏结束且无玩家，加入清理队列`);
       roomManager.scheduleRoomDestroy(room.code);
     }
+
+    // 每日统计：记录游戏完成
+    dailyStats.recordGameFinished();
   }
 }
 
@@ -3910,6 +3971,9 @@ function handleForceSettlement(ws, playerId, message) {
       console.log(`房间 ${room.code} 强制结算后无玩家，加入清理队列`);
       roomManager.scheduleRoomDestroy(room.code);
     }
+
+    // 每日统计：记录游戏完成
+    dailyStats.recordGameFinished();
   }
 }
 
@@ -4128,6 +4192,14 @@ app.get('/api/online-users', (req, res) => {
 });
 
 /**
+ * 查询每日统计
+ * GET /api/daily-stats
+ */
+app.get('/api/daily-stats', (req, res) => {
+  res.json(dailyStats.toJSON());
+});
+
+/**
  * 查询服务器统计信息
  * GET /api/stats
  */
@@ -4168,6 +4240,9 @@ app.get('/api/stats', (req, res) => {
         stats.players.inRooms++;
       }
     }
+
+    // 更新每日峰值在线
+    dailyStats.recordConnectionCount(stats.players.totalConnections);
 
     // 统计房间状态
     let cleanupRoomsCount = 0;
