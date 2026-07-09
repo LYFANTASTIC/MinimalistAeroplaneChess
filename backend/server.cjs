@@ -202,7 +202,8 @@ class RoomManager {
         playerCount: totalPlayerCount, // 包含AI玩家的总人数
         maxPlayers: 4,
         gameState: room.gameState,
-        createdAt: room.createdAt
+        createdAt: room.createdAt,
+        playerIds: Array.from(room.players.keys()) // 玩家ID列表，用于前端匹配身份
       });
     }
 
@@ -1038,6 +1039,18 @@ function handlePlayerDisconnect(playerId) {
       player.isConnected = false;
       player.ws = null;
       player.disconnectedAt = Date.now();
+
+      // 同步更新游戏会话中的玩家连接状态，确保重连信息能正确匹配
+      if (room.gameSessionId) {
+        const gameSession = roomManager.getGameSession(room.gameSessionId);
+        if (gameSession) {
+          const sessionPlayer = gameSession.players.get(playerId);
+          if (sessionPlayer) {
+            sessionPlayer.isConnected = false;
+          }
+        }
+      }
+
       // 广播离线消息
       room.broadcast({
         type: 'chatMessage',
@@ -1615,14 +1628,13 @@ function handleGetReconnectInfo(ws, playerId) {
       const room = roomManager.getRoom(gameSession.roomCode);
       const sessionPlayer = gameSession.players ? gameSession.players.get(playerId) : null;
       
-      // 只有当玩家被标记为离线（isConnected === false）且确实在玩家列表中时，才允许重连
-      // 这里的 sessionPlayer 是从 gameSession.players 获取的，如果玩家已被 delete，则 canReconnect 为 false
       const canReconnect = !!(
         room && 
         sessionPlayer && 
         sessionPlayer.isConnected === false &&
         gameSession.players.has(playerId)
       );
+      console.log(`[重连信息] player=${playerId} sessionFound=true isConnected=${sessionPlayer?.isConnected} canReconnect=${canReconnect} roomCode=${gameSession.roomCode}`);
       
       ws.send(JSON.stringify({
         type: 'reconnectInfo',
@@ -1638,12 +1650,12 @@ function handleGetReconnectInfo(ws, playerId) {
     if (room) {
       const roomPlayer = room.players ? room.players.get(playerId) : null;
       
-      // 房间重连也需要玩家在房间中且处于离线状态
       const canReconnect = !!(
         roomPlayer && 
         roomPlayer.isConnected === false &&
         room.players.has(playerId)
       );
+      console.log(`[重连信息] player=${playerId} roomFound=true isConnected=${roomPlayer?.isConnected} canReconnect=${canReconnect} roomCode=${room.code}`);
       
       ws.send(JSON.stringify({
         type: 'reconnectInfo',
@@ -1654,6 +1666,7 @@ function handleGetReconnectInfo(ws, playerId) {
       return;
     }
 
+    console.log(`[重连信息] player=${playerId} 未找到任何会话或房间`);
     ws.send(JSON.stringify({ type: 'reconnectInfo', canReconnect: false, roomCode: null }));
   } catch (error) {
     console.error('获取重连信息失败:', error);

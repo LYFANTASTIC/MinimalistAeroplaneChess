@@ -1224,6 +1224,21 @@ class MultiplayerManager {
             }
 
             case 'spectateJoined': {
+                if (data.isReconnect) {
+                    // 服务器确认了玩家在此房间中，更新本地重连信息，直接执行重连
+                    console.log('[重连] 服务端确认重连，直接执行重连');
+                    const roomCode = data.room?.code;
+                    if (roomCode) {
+                        this._reconnectRoomCode = roomCode;
+                        reconnectManager.updateRoomCode(roomCode);
+                        if (data.gameSessionId) {
+                            reconnectManager.updateGameSessionId(data.gameSessionId);
+                        }
+                        this.reconnectToLastRoom();
+                    }
+                    break;
+                }
+
                 console.log('加入观战成功:', data.room ? data.room.code : 'unknown');
                 
                 // 设置观战状态标志（非常重要，否则会按普通玩家初始化）
@@ -2259,16 +2274,18 @@ class MultiplayerManager {
 
             item.addEventListener('click', () => {
                 if (room.code) {
-                    // 检查是否具有该房间的重连资格（_reconnectRoomCode 是服务端下发的，reconnectManager 是本地持久化的）
-                    const lastRoomCode = (this._reconnectRoomCode || reconnectManager.roomCode || '').toUpperCase().trim();
-                    const hasReconnectRights = lastRoomCode === room.code.toUpperCase().trim();
-
                     if (room.gameState === 'playing') {
-                        if (hasReconnectRights) {
-                            console.log(`[重连] 检测到玩家拥有房间 ${room.code} 的重连资格，直接执行重连逻辑`);
-                            this.reconnectToLastRoom();
+                        // 用玩家固定ID匹配房间成员列表，确认是否自己的房间
+                        const myId = this.wsClient?.playerId;
+                        const isMyRoom = myId && room.playerIds && room.playerIds.includes(myId);
+                        console.log(`[房间点击] room=${room.code} myId=${myId} playerIds=${JSON.stringify(room.playerIds)} isMyRoom=${isMyRoom}`);
+
+                        if (isMyRoom) {
+                            // 自己的房间：直接重连
+                            console.log(`[房间点击] 自己的房间 ${room.code}，直接重连`);
+                            this.joinRoomByCode(room.code);
                         } else {
-                            // 如果正在游戏中且没有重连资格，跳转到观战逻辑
+                            // 不是自己的房间：询问是否观战
                             if (confirm(`房间 ${room.name} 正在游戏中，是否进入观战？`)) {
                                 this.spectateRoom(room.code);
                             }

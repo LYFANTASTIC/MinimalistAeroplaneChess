@@ -4222,7 +4222,7 @@ class MultiplayerGameManager {
 
                 // 初始化activePlayerManager（重连时需要）
                 const activePlayers = data.gameSession.players
-                    .filter(p => p.isConnected !== false || p.isAI) // 只包含在线玩家和AI玩家
+                    .filter(p => !p.isAI)
                     .map(p => p.color)
                     .sort((a, b) => a - b);
                 if (isRealReconnect) {
@@ -5143,14 +5143,7 @@ class MultiplayerGameManager {
     destroy() {
         this.disableReconnect = true;
         this.gameSessionId = null;
-        try {
-            // 主动销毁（例如返回主页）时，不应保留重连信息
-            if (reconnectManager && typeof reconnectManager.clearPlayerIdentity === 'function') {
-                reconnectManager.clearPlayerIdentity();
-            }
-        } catch (e) {
-            // ignore
-        }
+        // 不重置 reconnectManager，保留 roomCode 和 gameSessionId 以便玩家从房间列表重连
         if (this.wsClient) {
             this.wsClient.close();
             this.wsClient = null;
