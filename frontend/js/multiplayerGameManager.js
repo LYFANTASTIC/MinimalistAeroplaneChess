@@ -649,6 +649,13 @@ class MultiplayerGameManager {
     handleMessage(data) {
         // 如果是观战加入成功
         if (data.type === 'spectateJoined') {
+            // 如果服务器标记为重连（玩家观战自己的游戏），跳转到游戏页面
+            if (data.isReconnect) {
+                console.log('[重连] 检测到观战转重连，回到房间列表页');
+                window.location.href = '/';
+                return;
+            }
+
             console.log('加入观战成功:', data);
             
             this.isSpectator = true;

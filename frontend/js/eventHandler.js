@@ -1032,14 +1032,24 @@ class EventHandler {
     handlePendingPause() {
         if (this.pendingPause) {
             this.pendingPause = false;
-            // 切换暂停状态
-            const isPaused = gameState.togglePause();
-            this.updatePauseButtonText(); // 这会重新启用按钮并更新文本
 
-            // 暂停时清除思考计时器并显示暂停消息
-            if (isPaused) {
-                uiUpdater.stopThinkingProgressBar();
-                gameInfo.addGamePause();
+            // 联机模式下使用带同步的暂停/恢复流程
+            if (window.gameInstance && window.gameInstance.multiplayerGameManager &&
+                window.gameInstance.multiplayerGameManager.isOnlineMode) {
+                if (gameState.getIsPaused()) {
+                    this.resumeGame();
+                } else {
+                    this.pauseGame();
+                }
+            } else {
+                // 单机模式：直接切换暂停状态
+                const isPaused = gameState.togglePause();
+                this.updatePauseButtonText();
+
+                if (isPaused) {
+                    uiUpdater.stopThinkingProgressBar();
+                    gameInfo.addGamePause();
+                }
             }
         }
     }

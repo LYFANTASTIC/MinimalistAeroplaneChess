@@ -1826,10 +1826,33 @@ function handleSpectateRoom(ws, playerId, message) {
     return;
   }
 
-  // 记录观战连接
-  // 检查观战人数限制（防止恶意挤占带宽）
-    const MAX_SPECTATORS = 5;
-    if (room.spectators.size >= MAX_SPECTATORS) {
+  // 如果观战者本身就是游戏中的玩家，转为重连而非观战
+  if (room.gameSessionId) {
+    const gameSession = roomManager.getGameSession(room.gameSessionId);
+    if (gameSession && gameSession.players.has(playerId)) {
+      console.log(`[观战→重连] 玩家 ${playerId} 试图观战自己的游戏，转为重连处理`);
+      roomManager.setPlayerConnection(playerId, ws);
+      const player = gameSession.players.get(playerId);
+      if (player) {
+        player.ws = ws;
+      }
+      const response = {
+        type: 'spectateJoined',
+        room: room.toJSON(),
+        gameData: gameSession.gameData,
+        gameSessionId: room.gameSessionId,
+        gameSession: gameSession.toJSON(),
+        isReconnect: true
+      };
+      ws.send(JSON.stringify(response));
+      console.log(`玩家 ${playerId} 已通过观战路径重连游戏`);
+      return;
+    }
+  }
+
+  // 正常观战者
+  const MAX_SPECTATORS = 5;
+  if (room.spectators.size >= MAX_SPECTATORS) {
     ws.send(JSON.stringify({ type: 'error', message: '观战人数已满' }));
     return;
   }

@@ -1126,7 +1126,7 @@ class MultiplayerManager {
     }
 
     reconnectToLastRoom() {
-        const code = (this._reconnectRoomCode || '').trim().toUpperCase();
+        const code = (this._reconnectRoomCode || reconnectManager.roomCode || '').trim().toUpperCase();
         if (!code || code.length !== 4) {
             this.updateReconnectButtonVisibility(false);
             return;
@@ -2259,8 +2259,8 @@ class MultiplayerManager {
 
             item.addEventListener('click', () => {
                 if (room.code) {
-                    // 检查是否具有该房间的重连资格
-                    const lastRoomCode = (this._reconnectRoomCode || '').toUpperCase().trim();
+                    // 检查是否具有该房间的重连资格（_reconnectRoomCode 是服务端下发的，reconnectManager 是本地持久化的）
+                    const lastRoomCode = (this._reconnectRoomCode || reconnectManager.roomCode || '').toUpperCase().trim();
                     const hasReconnectRights = lastRoomCode === room.code.toUpperCase().trim();
 
                     if (room.gameState === 'playing') {
