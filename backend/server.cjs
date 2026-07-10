@@ -1001,10 +1001,7 @@ function handlePlayerDisconnect(playerId) {
     }
   }
 
-  // 如果在游戏会话中处理过，就结束（但先清理 playerRooms 和 playerSessions 映射）
   if (handledInSession) {
-    roomManager.playerRooms.delete(playerId);
-    roomManager.playerSessions.delete(playerId);
     return;
   }
 

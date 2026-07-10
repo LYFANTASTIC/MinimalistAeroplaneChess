@@ -35,7 +35,7 @@ class MultiplayerManager {
         this.isLeavingRoom = false; // 标志：正在主动离开房间
 
         this._backGuardEnabled = false;
-        this._isHandlingPopstate = false;
+        this._suppressNextPopstate = false;
         this._popstateHandler = null;
 
         this.offlineCountdowns = new Map(); // playerId -> { endAt, intervalId }
@@ -1447,17 +1447,18 @@ class MultiplayerManager {
                         }
                     }
 
+                    // 启用房间返回守卫
+                    this.showRoomConfig();
+
                     this.updateRoomInfo(); // 更新显示真实房间号
                     this.updatePlayerDisplay();
                     this.showCurrentPlayerSettings();
                     this.showHostSettings();
-                    this.updateConfigHeaderTitle();
 
                     // 更新URL，添加房间号参数
                     const newUrl = new URL(window.location);
                     newUrl.searchParams.set('room', this.roomCode);
                     window.history.replaceState({}, '', newUrl);
-
                 }
                 break;
             }
@@ -1644,7 +1645,7 @@ class MultiplayerManager {
                     this.hideHostSettings();
                 }
 
-                // 更新URL，添加房间号参数
+                // 更新URL，添加房间号参数（replaceState替换守卫条目，保持历史栈干净）
                 const newUrl = new URL(window.location);
                 newUrl.searchParams.set('room', this.roomCode);
                 window.history.replaceState({}, '', newUrl);
@@ -2975,31 +2976,26 @@ class MultiplayerManager {
 
         if (!this._popstateHandler) {
             this._popstateHandler = () => {
-                if (this._isHandlingPopstate) return;
-                this._isHandlingPopstate = true;
+                const roomConfig = document.getElementById('roomConfig');
+                const roomConfigDisplay = roomConfig ? window.getComputedStyle(roomConfig).display : 'none';
+                console.log(`[popstate] roomConfig display=${roomConfigDisplay}`);
+                if (roomConfigDisplay === 'none') {
+                    return;
+                }
 
-                try {
-                    const roomConfig = document.getElementById('roomConfig');
-                    const roomConfigDisplay = roomConfig ? window.getComputedStyle(roomConfig).display : 'none';
-                    if (roomConfigDisplay === 'none') {
-                        return;
-                    }
+                // 防止 go(1) 触发的 popstate 再次弹窗
+                if (this._suppressNextPopstate) {
+                    this._suppressNextPopstate = false;
+                    return;
+                }
 
-                    const shouldLeave = confirm('确定要离开房间吗？');
-                    if (shouldLeave) {
-                        this.leaveRoom(false);
-                        return;
-                    }
-
-                    try {
-                        window.history.pushState({ __roomBackGuard: true }, '', window.location.href);
-                    } catch (e) {
-                        // ignore
-                    }
-                } finally {
-                    setTimeout(() => {
-                        this._isHandlingPopstate = false;
-                    }, 0);
+                const shouldLeave = confirm('确定要离开房间吗？');
+                if (shouldLeave) {
+                    this.leaveRoom(false);
+                } else {
+                    // 向前导航一步，取消"返回"操作，不破坏历史栈结构
+                    this._suppressNextPopstate = true;
+                    window.history.go(1);
                 }
             };
         }
