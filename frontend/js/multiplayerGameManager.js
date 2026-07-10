@@ -4220,9 +4220,8 @@ class MultiplayerGameManager {
                     }
                 }
 
-                // 初始化activePlayerManager（重连时需要）
+                // 初始化activePlayerManager
                 const activePlayers = data.gameSession.players
-                    .filter(p => !p.isAI)
                     .map(p => p.color)
                     .sort((a, b) => a - b);
                 if (isRealReconnect) {

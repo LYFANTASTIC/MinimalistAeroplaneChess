@@ -25,8 +25,9 @@ class UIUpdater {
             this.highlightMovableChess();
             this.updateStartAreaGlow();
         } else {
-            // 观战模式下清除这些高亮
+            // 观战模式下清除交互性高亮，但保留可移动棋子高亮
             this.clearAllGlows();
+            this.highlightMovableChess();
         }
 
         this.updatePlayerAvatarGlow();
