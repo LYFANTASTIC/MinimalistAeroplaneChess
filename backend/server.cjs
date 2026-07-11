@@ -322,6 +322,8 @@ class RoomManager {
   setPlayerConnection(playerId, ws) {
     this.playerConnections.set(playerId, ws);
     dailyStats.recordPlayerConnected(playerId);
+    // 每次有玩家连接时更新峰值，不依赖 /api/stats 的轮询
+    dailyStats.recordConnectionCount(this.playerConnections.size);
   }
 
   // 获取玩家连接
