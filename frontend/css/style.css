@@ -55,7 +55,7 @@
     --border-almost-none: rgba(61, 53, 45, 0.15);
 
     /* 背景颜色变量 - 浅色背景 */
-    --bg-medium: rgba(255, 253, 250, 0.8);
+    --bg-medium: rgba(255, 253, 250, 1);
     --bg-soft: rgba(255, 253, 250, 0.6);
     --bg-faint: rgba(255, 253, 250, 0.4);
     --bg-very-faint: rgba(255, 253, 250, 0.3);
@@ -3650,8 +3650,8 @@ use[href="#checkmark"] {
 .mode-rules-popup {
     max-width: 460px;
     width: 90%;
-    background: var(--bg-light-1);
-    border: 1px solid var(--border-light);
+    background: var(--bg-medium);
+    border: 2px solid var(--border-light);
     border-radius: 8px;
     box-shadow: 0 4px 24px rgba(0,0,0,0.15);
 }
