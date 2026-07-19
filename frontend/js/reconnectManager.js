@@ -79,7 +79,6 @@ class ReconnectManager {
         this.isHost = false;
 
         // 清除localStorage
-        localStorage.removeItem('aeroplaneChess_playerNickname');
         localStorage.removeItem('aeroplaneChess_playerEmoji');
         localStorage.removeItem('aeroplaneChess_playerColor');
         localStorage.removeItem('aeroplaneChess_isHost');
@@ -128,6 +127,7 @@ class ReconnectManager {
      * 更新房间号
      */
     updateRoomCode(roomCode) {
+        if (this.roomCode === roomCode) return;
         this.roomCode = roomCode;
         if (roomCode) {
             sessionStorage.setItem('aeroplaneChess_roomCode', roomCode);

@@ -99,11 +99,7 @@ class PlayerIdManager {
      * @returns {string|null} 存储的昵称，如果不存在则返回null
      */
     getSavedNickname() {
-        const nickname = localStorage.getItem('aeroplaneChess_playerNickname');
-        if (nickname) {
-            console.log('从本地存储读取昵称:', nickname);
-        }
-        return nickname;
+        return localStorage.getItem('aeroplaneChess_playerNickname');
     }
 
     /**

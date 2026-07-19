@@ -80,6 +80,9 @@ class FlyingChessGame {
         // 设置全局游戏实例引用（供其他模块使用）
         window.gameInstance = this;
 
+        // 尽早开始预加载音频（跳过等待，音频文件已被首页浏览器缓存）
+        audioManager.preloadSounds(true);
+
         // 设置音频管理器回调，处理加载 UI
         this.setupAudioManagerUI();
 
@@ -126,6 +129,11 @@ class FlyingChessGame {
                 this.hideLoadingUI();
             }
         });
+
+        // 如果音频已提前加载完成，直接隐藏加载UI
+        if (audioManager.isLoaded) {
+            this.hideLoadingUI();
+        }
     }
 
     /**

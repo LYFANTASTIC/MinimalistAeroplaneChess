@@ -346,17 +346,15 @@ class MultiplayerGameManager {
      */
     notifyAudioLoaded() {
         if (this.isSpectator) return;
-        console.log('[音频加载] 本地音频预加载完成，准备发送 notifyAudioLoaded');
+        console.log('[音频] 本地音频预加载完成');
         
         // 如果不在联机模式，直接返回
         if (!this.isOnlineMode) {
-            console.log('[音频加载] 不在联机模式，跳过音频加载通知');
             return;
         }
 
         // 如果WebSocket未连接，加入待发送队列
         if (!this.isConnected) {
-            console.log('[音频加载] WebSocket连接未就绪，audioLoaded 消息加入待发送队列');
             if (!this.pendingMessages) {
                 this.pendingMessages = [];
             }
@@ -369,8 +367,6 @@ class MultiplayerGameManager {
             });
             return;
         }
-
-        console.log('[音频加载] 发送 audioLoaded 消息给服务器');
         this.sendMessage('audioLoaded', {
             playerId: this.playerId,
             timestamp: Date.now()
@@ -411,7 +407,7 @@ class MultiplayerGameManager {
             }
             return;
         }
-        console.log('[音频加载] 收到全员加载完成信号 (allAudioLoaded):', data);
+        console.log('[音频] 收到全员加载完成信号 (allAudioLoaded):', data);
         
         // 标记游戏已完成初始化
         this.gameInitialized = true;
@@ -1148,12 +1144,12 @@ class MultiplayerGameManager {
         // 同步游戏正式开始标志
         if (gameData.gameOfficiallyStarted !== undefined) {
             gameState.setGameOfficiallyStarted(gameData.gameOfficiallyStarted);
-            console.log(`[重连] 同步游戏正式开始状态: ${gameData.gameOfficiallyStarted}`);
+            console.log(`[游戏状态] 同步游戏正式开始状态: ${gameData.gameOfficiallyStarted}`);
         } else {
             // 如果后端没有提供该标志，则通过棋子位置推断
             const isStarted = this.hasNonInitialChessPositions(gameData.playerChess);
             gameState.setGameOfficiallyStarted(isStarted);
-            console.log(`[重连] 通过棋子位置推断游戏正式开始状态: ${isStarted}`);
+            console.log(`[游戏状态] 通过棋子位置推断游戏正式开始状态: ${isStarted}`);
         }
 
         // 恢复连投奖励状态
@@ -1382,15 +1378,15 @@ class MultiplayerGameManager {
             }
         }
 
-        // 如果游戏处于暂停状态，不应启动重连进度条
+        // 如果游戏处于暂停状态，不应启动进度条
         if (gameState.getIsPaused()) {
-            console.log('[重连进度条] 跳过：当前游戏处于暂停状态，不启动进度条');
+            console.log('[进度条] 跳过：当前游戏处于暂停状态，不启动进度条');
         }
-        // 只有“真正断线重连”才启动重连进度条；正常进入游戏/首次同步不应触发
+        // 只有“真正断线重连”才启动进度条；正常进入游戏/首次同步不应触发
         else if (this.isReconnecting || this._didDisconnectOnce) {
             this.startProgressBarAfterReconnect();
         } else {
-            console.log('[重连进度条] 跳过：当前为正常进入/首次同步，不启动重连进度条');
+            console.log('[进度条] 跳过：当前为正常进入/首次同步，不启动进度条');
         }
     }
 
@@ -4243,7 +4239,7 @@ class MultiplayerGameManager {
                     window.audioManager.onAllPlayersAudioLoaded();
                 }
 
-                console.log('[游戏状态恢复] 收到gameData:', gameData);
+                console.log('[游戏状态同步] 收到gameData:', gameData);
 
                 // 检查是否需要恢复：有当前玩家或有棋子不在初始位置
                 const needsRestore = gameData.currentPlayer !== null ||
@@ -4252,10 +4248,10 @@ class MultiplayerGameManager {
                 // 观战模式总是恢复
                 // 普通模式只要 needsRestore 为 true 就恢复（即使不是重连！）
                 if (this.isSpectator || needsRestore) {
-                    console.log('[游戏状态恢复] 开始调用restoreGameState');
+                    console.log('[游戏状态同步] 开始调用restoreGameState');
                     this.restoreGameState(gameData);
                 } else {
-                    console.log('[游戏状态恢复] 跳过restoreGameState，条件不满足');
+                    console.log('[游戏状态同步] 跳过restoreGameState，条件不满足');
                 }
             } else {
                 if (isRealReconnect) {

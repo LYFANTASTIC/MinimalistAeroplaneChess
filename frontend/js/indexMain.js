@@ -1,6 +1,17 @@
 import { emojis, defaultEmoji } from '../assets/emojis.js';
 import { MultiplayerManager } from './multiplayerManager.js';
 import { nicknameGenerator } from './nicknameGenerator.js';
+import { audioManager } from './audioManager.js';
+window.audioManager = audioManager;
+
+// 页面完全加载后，在浏览器空闲时静默预加载音频，不影响首屏体验
+window.addEventListener('load', () => {
+    if (typeof requestIdleCallback === 'function') {
+        requestIdleCallback(() => audioManager.preloadSounds(), { timeout: 2000 });
+    } else {
+        setTimeout(() => audioManager.preloadSounds(), 2000);
+    }
+});
 
 // 游戏提示轮播
 class GameTipsCarousel {
@@ -182,6 +193,17 @@ class PlayerSetup {
 
         // 恢复棋子个数的选中状态
         this.restorePieceCountSelection();
+
+        if (window.playerIdManager) {
+            const savedNickname = window.playerIdManager.getSavedNickname();
+            if (savedNickname) {
+                const aiUsernameInput = document.getElementById('playerUsername');
+                if (aiUsernameInput && !aiUsernameInput.value.trim()) {
+                    aiUsernameInput.value = savedNickname;
+                    this.playerUsername = savedNickname;
+                }
+            }
+        }
     }
 
     // 设置本地多人配置
@@ -1135,6 +1157,10 @@ class PlayerSetup {
         if (usernameInput) {
             usernameInput.addEventListener('input', (e) => {
                 this.playerUsername = e.target.value.trim();
+                // 持久化保存到 localStorage
+                if (window.playerIdManager) {
+                    window.playerIdManager.saveNickname(this.playerUsername);
+                }
             });
         }
 
@@ -1152,6 +1178,10 @@ class PlayerSetup {
                 if (usernameInput) {
                     usernameInput.value = randomNickname;
                     this.playerUsername = randomNickname;
+                    // 持久化保存到 localStorage
+                    if (window.playerIdManager) {
+                        window.playerIdManager.saveNickname(randomNickname);
+                    }
                 }
             });
         }
@@ -1286,7 +1316,6 @@ class PlayerSetup {
         if (selectedOption) {
             selectedOption.classList.add('selected');
         }
-        console.log(`恢复本地多人模式棋子个数选择：${this.localMultiplayerConfig.pieceCount}`);
     }
 
     addBot(playerNum) {

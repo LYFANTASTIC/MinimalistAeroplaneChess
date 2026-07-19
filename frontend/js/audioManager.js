@@ -47,6 +47,8 @@ class AudioManager {
         this.isMultiplayerMode = !!isMultiplayer;
         if (!this.preloadStarted) {
             this.preloadSounds();
+        } else if (this.isLoaded) {
+            this._handlePreloadComplete();
         }
     }
 
@@ -67,12 +69,29 @@ class AudioManager {
 
     /**
      * 预加载所有音效文件
+     * @param {boolean} skipWaiting - 是否跳过 canplaythrough 等待（game.html 页面使用，音频已被浏览器缓存）
      */
-    async preloadSounds() {
-        if (this.preloadStarted) return;
-
+    async preloadSounds(skipWaiting = false) {
+        if (this.preloadStarted) {
+            console.log(`[audioManager] preloadSounds 跳过（已在加载中），页面: ${window.location.pathname}`);
+            return;
+        }
         this.preloadStarted = true;
         if (this.onProgressCallback) this.onProgressCallback(0);
+
+        if (skipWaiting) {
+            Object.entries(this.soundPaths).forEach(([key, path]) => {
+                const audio = new Audio(path);
+                audio.preload = 'auto';
+                audio.volume = this.volume;
+                this.sounds[key] = audio;
+                audio.load();
+            });
+            this.isLoaded = true;
+            console.log(`[audioManager] 预加载完成（跳过等待）`);
+            this._handlePreloadComplete();
+            return;
+        }
 
         try {
             const totalSounds = Object.keys(this.soundPaths).length;
@@ -108,19 +127,9 @@ class AudioManager {
 
             await Promise.all(loadPromises);
             this.isLoaded = true;
-
-            if (this.isMultiplayerMode && window.multiplayerGameManager) {
-                if (this.allPlayersAudioLoaded) {
-                    this._notifyStatus('ready');
-                } else {
-                    this._notifyStatus('waiting_others');
-                }
-                window.multiplayerGameManager.notifyAudioLoaded();
-            } else {
-                this._notifyStatus('ready');
-            }
+            console.log(`[audioManager] 预加载完成`);
+            this._handlePreloadComplete();
         } catch (error) {
-            console.error('音效预加载失败:', error);
             this.isLoaded = true;
             this._notifyStatus('ready'); // 失败也继续，避免阻塞
         }
@@ -133,6 +142,22 @@ class AudioManager {
         console.log('[音频] 所有玩家音频加载完成');
         this.allPlayersAudioLoaded = true;
         this._notifyStatus('ready');
+    }
+
+    /**
+     * 处理预加载完成后的就绪逻辑
+     */
+    _handlePreloadComplete() {
+        if (this.isMultiplayerMode && window.multiplayerGameManager) {
+            if (this.allPlayersAudioLoaded) {
+                this._notifyStatus('ready');
+            } else {
+                this._notifyStatus('waiting_others');
+            }
+            window.multiplayerGameManager.notifyAudioLoaded();
+        } else if (this.onStatusChangeCallback && !window.multiplayerGameManager) {
+            this._notifyStatus('ready');
+        }
     }
 
     /**
