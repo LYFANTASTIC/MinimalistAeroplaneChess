@@ -2430,6 +2430,7 @@ function handleToggleReady(ws, playerId, message) {
 function handleStartGame(ws, playerId) {
   const room = roomManager.getPlayerRoom(playerId);
   if (!room) throw new Error('玩家不在任何房间中');
+  if (room.gameState === 'playing') throw new Error('游戏已经开始');
   if (room.players.size < 2) throw new Error('至少需要2名玩家才能开始游戏');
 
   // 开始新一局时，清除结算返回房主锁定

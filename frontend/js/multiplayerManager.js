@@ -4174,6 +4174,10 @@ class MultiplayerManager {
             return;
         }
 
+        // 禁用按钮防止重复点击
+        const startBtn = document.getElementById('multiplayerStartGame');
+        if (startBtn) startBtn.disabled = true;
+
         // 使用sendMessage方法而不是直接调用send
         this.wsClient.sendMessage('startGame');
     }
