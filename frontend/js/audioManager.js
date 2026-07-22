@@ -144,6 +144,13 @@ class AudioManager {
         this._notifyStatus('ready');
     }
 
+    updateLoadingText(text) {
+        const loadingText = document.getElementById('loadingIndicator')?.querySelector('.loading-text');
+        if (loadingText) {
+            loadingText.textContent = text;
+        }
+    }
+
     /**
      * 处理预加载完成后的就绪逻辑
      */

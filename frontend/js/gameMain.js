@@ -173,6 +173,7 @@ class FlyingChessGame {
         this.skillManager.updateButtonVisibility();
         // 更新 AI 托管按钮显示
         aiTakeoverManager.updateControlButtons();
+        aiTakeoverManager.updateToggleButton();
     }
 
     // 初始化游戏

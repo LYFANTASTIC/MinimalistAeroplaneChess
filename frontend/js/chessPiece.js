@@ -506,7 +506,7 @@ class ChessPiece {
         const { player, chessIndex } = this.gameState.selectedChess;
         const chess = this.gameState.playerChess[player][chessIndex];
 
-        console.log(`[移动] 玩家${player}选择了棋子${chessIndex}进行移动`);
+        console.log(`[选择] 玩家${player} 棋子${chessIndex}`);
         
         // 清空本次移动中被 beat 的棋子收集器
         this._currentMoveBeatenChesses = [];
@@ -518,7 +518,7 @@ class ChessPiece {
                 const currentDiceValue = this.gameState.diceValue;
 
                 if (!this._isNetworkReplayMode && this.gameState.isOnlineMultiplayer && window.gameInstance && window.gameInstance.multiplayerGameManager) {
-                    window.gameInstance.multiplayerGameManager.syncFullMoveStart(player, chessIndex, currentDiceValue, fromPosition);
+                    window.gameInstance.multiplayerGameManager.syncFullMoveStart(player, chessIndex, currentDiceValue, fromPosition, 0);
                 }
 
                 audioManager.playFlySound();
@@ -587,7 +587,7 @@ class ChessPiece {
             }
         } else {
             if (!this._isNetworkReplayMode && this.gameState.isOnlineMultiplayer && window.gameInstance && window.gameInstance.multiplayerGameManager) {
-                window.gameInstance.multiplayerGameManager.syncFullMoveStart(player, chessIndex, this.gameState.diceValue, chess.position);
+                window.gameInstance.multiplayerGameManager.syncFullMoveStart(player, chessIndex, this.gameState.diceValue, chess.position, chess.position);
             }
             this.animateChessMovement(player, chessIndex, this.gameState.diceValue);
             return;
@@ -629,10 +629,11 @@ class ChessPiece {
             let needsStackCrash = false;
             let needsBounce = false;
             let bounceSteps = 0;
+            let stackInfo = null;
 
             if (!this.gameState.isHappyMode()) {
                 // 检查前方路径上是否有其他玩家的叠子
-                const stackInfo = this.utils.checkStackInPath(player, currentPosition, steps, this.gameState);
+                stackInfo = this.utils.checkStackInPath(player, currentPosition, steps, this.gameState);
 
                 if (stackInfo) {
                     if (stackInfo.isExactHit) {
@@ -859,6 +860,7 @@ class ChessPiece {
 
             // 移动完成后的最终位置
             const actualFinalPosition = chess.position;
+            console.log(`[移动] 玩家${player} 棋子${chessIndex} → 位置${actualFinalPosition}`);
 
             // 检查特殊位置（起跳点和飞棋点）
             let hasSpecialAction = false;
@@ -1044,13 +1046,13 @@ class ChessPiece {
     /**
      * 更新所有棋子的位置以重新计算叠加偏移
      */
-    updateAllChessPositions() {
+    updateAllChessPositions(animate = true) {
         const pieceCount = this.gameState.pieceCount || 4; // 获取当前棋子个数，默认为4
         for (let player = 1; player <= 4; player++) {
             for (let chessIndex = 0; chessIndex < pieceCount; chessIndex++) {
                 const chess = this.gameState.playerChess[player][chessIndex];
                 if (!chess.finished && chess.position >= 0) {
-                    this.animation.updateChessPosition(player, chessIndex);
+                    this.animation.updateChessPosition(player, chessIndex, null, animate);
                 }
             }
         }
@@ -1532,10 +1534,7 @@ class ChessPiece {
      */
     handleMoveComplete(player) {
         // 网络回放模式：跳过所有状态变更
-        if (this._isNetworkReplayMode) {
-            console.log('[handleMoveComplete] 回放模式，跳过状态变更');
-            return;
-        }
+        if (this._isNetworkReplayMode) return;
 
         // 移动结束后移除选定棋子的高亮效果
         if (this.gameState.selectedChess) {
@@ -1556,8 +1555,6 @@ class ChessPiece {
 
         // 如果可以重新投骰，保持当前玩家；否则切换到下一个玩家
         if (this.gameState.canReroll) {
-            console.log(`玩家${player}摇到6，可以重新投骰`);
-
             // 延迟显示连投奖励信息，确保所有beat操作完成后再显示
             setTimeout(() => {
                 // 只有在刚刚掷出6点时才显示连投奖励信息，且不是回放模式

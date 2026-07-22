@@ -71,36 +71,41 @@ class Dice {
 
         // 如果是在线多人模式，先发送动画开始消息，让所有玩家同时开始动画
         if (this.gameState.isOnlineMultiplayer && window.gameInstance && window.gameInstance.multiplayerGameManager) {
-            // 发送动画开始消息，传递当前玩家编号（1-4）
-            window.gameInstance.multiplayerGameManager.syncDiceAnimationStart(this.gameState.currentPlayer);
+            const isRemoteDice = this.presetDiceValue !== null;
+            if (this.presetDiceValue !== null) {
+                this.gameState.diceValue = this.presetDiceValue;
+                console.log(`玩家${this.gameState.currentPlayer}使用遥控骰子，掷出了${this.gameState.diceValue}点`);
+                this.presetDiceValue = null; // 使用后清除预设值
+            } else {
+                this.gameState.diceValue = Math.floor(Math.random() * 6) + 1;
+                console.log(`[同步] 玩家${this.gameState.currentPlayer}摇到了${this.gameState.diceValue}点`);
+                // 统计普通骰子投掷（不统计遥控骰子）
+                if (this.gameState.diceStatistics && this.gameState.diceStatistics[this.gameState.currentPlayer]) {
+                    this.gameState.diceStatistics[this.gameState.currentPlayer][this.gameState.diceValue]++;
+                    // 同步骰子统计到服务器（用于重连恢复）
+                    const currentCount = this.gameState.diceStatistics[this.gameState.currentPlayer][this.gameState.diceValue];
+                    window.gameInstance.multiplayerGameManager.syncDiceStatistics(
+                        this.gameState.currentPlayer,
+                        this.gameState.diceValue,
+                        currentCount
+                    );
+                }
+            }
 
-            // 等待动画完成后生成并发送骰子结果
+            // 立即添加到游戏信息
+            gameInfo.addDiceRoll(this.gameState.currentPlayer, this.gameState.diceValue, true);
+
+            // 发送动画开始消息，同时携带骰子值，确保其他客户端和服务器知晓结果
+            window.gameInstance.multiplayerGameManager.syncDiceAnimationStart(this.gameState.currentPlayer, this.gameState.diceValue);
+
+            // 等待动画完成后发送骰子结果给服务器处理游戏状态变更
             setTimeout(async () => {
-                const isRemoteDice = this.presetDiceValue !== null;
-                if (this.presetDiceValue !== null) {
-                    this.gameState.diceValue = this.presetDiceValue;
-                    console.log(`玩家${this.gameState.currentPlayer}使用遥控骰子，掷出了${this.gameState.diceValue}点`);
-                    this.presetDiceValue = null; // 使用后清除预设值
-                } else {
-                    this.gameState.diceValue = Math.floor(Math.random() * 6) + 1;
-                    console.log(`玩家${this.gameState.currentPlayer}掷出了${this.gameState.diceValue}点`);
-                    // 统计普通骰子投掷（不统计遥控骰子）
-                    if (this.gameState.diceStatistics && this.gameState.diceStatistics[this.gameState.currentPlayer]) {
-                        this.gameState.diceStatistics[this.gameState.currentPlayer][this.gameState.diceValue]++;
-                        // 同步骰子统计到服务器（用于重连恢复）
-                        const currentCount = this.gameState.diceStatistics[this.gameState.currentPlayer][this.gameState.diceValue];
-                        window.gameInstance.multiplayerGameManager.syncDiceStatistics(
-                            this.gameState.currentPlayer,
-                            this.gameState.diceValue,
-                            currentCount
-                        );
-                    }
+                // 停止本地闪烁动画
+                if (window.gameInstance && window.gameInstance.multiplayerGameManager) {
+                    window.gameInstance.multiplayerGameManager.stopDiceFlashing();
                 }
 
-                // 立即添加到游戏信息（在同步之前），确保本地显示顺序正确
-                gameInfo.addDiceRoll(this.gameState.currentPlayer, this.gameState.diceValue, true);
-
-                // 发送骰子结果给所有玩家（传递isRemoteDice标志）
+                // 发送骰子结果给所有玩家（服务端会处理游戏状态变更）
                 window.gameInstance.multiplayerGameManager.syncDiceRoll(this.gameState.diceValue, this.gameState.currentPlayer, isRemoteDice);
 
                 // 在联机模式下，本地玩家也需要处理骰子结果
@@ -225,11 +230,13 @@ class Dice {
                     // 单机模式：前端自己管理计数
                     this.gameState.consecutiveSixes++;
                 }
-                console.log(`玩家${this.gameState.currentPlayer}连续摇到${this.gameState.consecutiveSixes}次6`);
+                if (this.gameState.consecutiveSixes > 0) {
+                    console.log(`玩家${this.gameState.currentPlayer}连续摇到${this.gameState.consecutiveSixes}次6`);
+                }
 
                 // 检查是否连续摇到3次6
                 if (this.gameState.consecutiveSixes >= 3) {
-                    console.log(`[警告] 玩家${this.gameState.currentPlayer}连续摇到${this.gameState.consecutiveSixes}次6`);
+                    console.log(`[警告] 玩家${this.gameState.currentPlayer}连续摇到3次6`);
 
                     if (this.gameState.isHappyMode()) {
                         // 欢乐模式：跳过惩罚，连投奖励，继续选棋移动
@@ -340,11 +347,13 @@ class Dice {
                 }, 500);
             }
 
+            const rollPlayer = this.gameState.currentPlayer;
+
             // 在联机模式下，同步无法移动的状态给其他客户端
             if (this.gameState.isOnlineMultiplayer && window.gameInstance && window.gameInstance.multiplayerGameManager) {
                 // 检查是否是AI托管玩家（非房主）
                 const multiplayerManager = window.gameInstance.multiplayerGameManager;
-                const currentPlayerId = multiplayerManager.getPlayerIdByPlayerNumber(this.gameState.currentPlayer);
+                const currentPlayerId = multiplayerManager.getPlayerIdByPlayerNumber(rollPlayer);
                 const isAITakeoverPlayer = multiplayerManager.aiTakeoverPlayers.has(currentPlayerId);
                 const isHost = multiplayerManager.isHost;
                 const isLocalPlayer = currentPlayerId === multiplayerManager.playerId;
@@ -354,14 +363,19 @@ class Dice {
                     console.log('AI托管玩家（非房主）跳过无法移动消息的处理，等待房主代理');
                 } else {
                     // 其他情况：添加本地消息
-                    gameInfo.addNoMovableChess(this.gameState.currentPlayer, this.gameState.diceValue, true);
+                    gameInfo.addNoMovableChess(rollPlayer, this.gameState.diceValue, true);
 
                     // 发送网络同步消息给其他客户端
-                    multiplayerManager.syncNoMovableChess(this.gameState.currentPlayer, this.gameState.diceValue);
+                    multiplayerManager.syncNoMovableChess(rollPlayer, this.gameState.diceValue);
                 }
             } else {
                 // 单机模式下直接添加消息
                 gameInfo.addNoMovableChess(this.gameState.currentPlayer, this.gameState.diceValue);
+            }
+
+            // 在联机模式下，日志在 await 前打印，避免被服务器同步消息（如"切换到玩家X"）打乱顺序
+            if (this.gameState.isOnlineMultiplayer && window.gameInstance && window.gameInstance.multiplayerGameManager) {
+                console.log(`联机模式：玩家${rollPlayer}无法移动，等待服务器同步玩家切换`);
             }
 
             this.uiUpdater.updateUI();
@@ -369,7 +383,6 @@ class Dice {
 
             // 在联机模式下，不要本地切换玩家，统一等待服务器同步
             if (this.gameState.isOnlineMultiplayer && window.gameInstance && window.gameInstance.multiplayerGameManager) {
-                console.log(`联机模式：玩家${this.gameState.currentPlayer}无法移动，等待服务器同步玩家切换`);
             } else {
                 // 单机模式正常切换玩家
                 this.gameState.nextPlayer(this.uiUpdater, this.handleThinkingTimeoutWrapper.bind(this), this.triggerBotOperationIfNeeded.bind(this));
@@ -407,6 +420,9 @@ class Dice {
         this.gameState.canReroll = false;
         this.gameState.justRolledSix = false;
         this.uiUpdater.updateUI();
+
+        // 保存玩家编号，避免 await 期间被服务器同步篡改
+        const penaltyPlayer = this.gameState.currentPlayer;
         await new Promise(resolve => setTimeout(resolve, 1000));
 
         // 停止思考进度条，防止Bot继续操作
@@ -416,7 +432,7 @@ class Dice {
 
         // 在联机模式下，不要本地切换玩家，等待服务器同步
         if (this.gameState.isOnlineMultiplayer && window.gameInstance && window.gameInstance.multiplayerGameManager) {
-            console.log(`联机模式：玩家${this.gameState.currentPlayer}连续3次6惩罚后，等待服务器同步玩家切换`);
+            console.log(`联机模式：玩家${penaltyPlayer}连续3次6惩罚后，等待服务器同步玩家切换`);
             // 重置游戏阶段，防止Bot继续操作
             this.gameState.gamePhase = 'waiting';
             // 不调用 nextPlayer()，等待服务器同步

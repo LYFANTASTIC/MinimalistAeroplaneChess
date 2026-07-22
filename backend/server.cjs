@@ -417,6 +417,8 @@ class GameSession {
       canReroll: false,
       consecutiveSixes: 0,
       justRolledSix: false,
+      // 本回合骰子值是否已被消耗（防止重连后重复移动）
+      diceValueConsumed: false,
       // 数据分析相关（用于重连恢复）
       diceStatistics: {}, // 骰子投掷统计
       progressHistory: [], // 完成度历史记录
@@ -937,11 +939,15 @@ function handlePlayerDisconnect(playerId) {
         isSystemMessage: true,
         timestamp: Date.now()
       });
-      // 广播断开状态
+      // 广播断开状态（只发送玩家列表，不发送全量 gameData 减轻其他客户端解析负担）
+      const playersArray = Array.from(gameSession.players.values()).map(p => ({
+        id: p.id, color: p.color, nickname: p.nickname, emoji: p.emoji,
+        isHost: p.isHost || false, isConnected: p.isConnected, isAI: p.isAI
+      }));
       gameSession.broadcast({
         type: 'playerDisconnected',
         playerId,
-        gameSession: gameSession.toJSON()
+        players: playersArray
       });
 
       // 如果是当前玩家断线
@@ -1161,10 +1167,14 @@ function forceDetachPlayerFromExistingContexts(playerId, nextRoomCode = null, is
             isSystemMessage: true,
             timestamp: Date.now()
           });
+          const detachPlayers = Array.from(gs.players.values()).map(p => ({
+            id: p.id, color: p.color, nickname: p.nickname, emoji: p.emoji,
+            isHost: p.isHost || false, isConnected: p.isConnected, isAI: p.isAI
+          }));
           gs.broadcast({
             type: 'playerDisconnected',
             playerId,
-            gameSession: gs.toJSON()
+            players: detachPlayers
           });
         } catch (e) {
           console.error('forceDetachPlayerFromExistingContexts 游戏会话广播失败:', e);
@@ -1488,6 +1498,12 @@ function handleMessage(ws, playerId, message) {
         break;
       case 'rejoinGameSession':
         handleRejoinGameSession(ws, playerId, message);
+        break;
+      case 'boardSyncRequest':
+        handleBoardSyncRequest(ws, playerId, message);
+        break;
+      case 'boardSyncData':
+        handleBoardSyncData(ws, playerId, message);
         break;
       case 'updatePlayer':
         handleUpdatePlayer(ws, playerId, message);
@@ -2282,10 +2298,14 @@ function handleLeaveRoom(ws, playerId, message = {}, isSilentMigration = false) 
       });
 
       // 触发断开连接消息，确保前端UI表现一致（断开线标志等）
+      const disconnectPlayers = Array.from(gameSession.players.values()).map(p => ({
+        id: p.id, color: p.color, nickname: p.nickname, emoji: p.emoji,
+        isHost: p.isHost || false, isConnected: false, isAI: p.isAI
+      }));
       gameSession.broadcast({
         type: 'playerDisconnected',
         playerId,
-        gameSession: gameSession.toJSON()
+        players: disconnectPlayers
       });
     }
 
@@ -2671,6 +2691,12 @@ function handleDiceRoll(ws, playerId, message) {
 
   if (!target) throw new Error('玩家不在任何房间或游戏会话中');
 
+  // 取消骰子动画的 fallback 定时器（如果存在），避免重复处理
+  if (gameSession && gameSession._diceRollFallbackTimer) {
+    clearTimeout(gameSession._diceRollFallbackTimer);
+    gameSession._diceRollFallbackTimer = null;
+  }
+
   // 更新游戏状态（仅游戏会话）
   if (gameSession && gameSession.gameData) {
     // 防串号：只允许当前回合玩家掷骰。客户端不同步时忽略非法掷骰，避免污染连投计数。
@@ -2681,6 +2707,7 @@ function handleDiceRoll(ws, playerId, message) {
 
     gameSession.gameData.diceValue = message.diceValue;
     gameSession.gameData.gamePhase = 'moving';
+    gameSession.gameData.diceValueConsumed = false; // 新骰子值已就绪
     
     // 首个操作后，标记游戏正式开始
     if (!gameSession.gameData.gameOfficiallyStarted) {
@@ -2820,6 +2847,34 @@ function handleFullMoveStart(ws, playerId, message) {
   const target = getBroadcastTarget(playerId);
   if (!target) throw new Error('玩家不在任何房间或游戏会话中');
 
+  // 立即标记骰子值已被消耗，防止玩家在移动动画过程中刷新页面后利用 diceValueConsumed=false
+  // 重复选择棋子进行多次移动（见 restoreGameState 特殊处理2）
+  if (target.gameData && message.player !== undefined && message.chessIndex !== undefined) {
+    target.gameData.diceValueConsumed = true;
+
+    // 不要更新 chessData.position，避免重连后棋子恢复到错误位置
+    // boardSync 联动另一位在线玩家的真实状态进行纠正
+    const chessData = target.gameData.playerChess?.[message.player]?.[message.chessIndex];
+    let computedTarget = message.targetPosition;
+    if (chessData) {
+      if (computedTarget === undefined && typeof message.fromPosition === 'number' && typeof message.diceValue === 'number') {
+        computedTarget = message.fromPosition >= 0
+          ? Math.min(message.fromPosition + message.diceValue, 56)
+          : 0;
+      }
+      // 不再更新 chessData.position——等待 syncFinalMoveResult 或 boardSync 纠正
+      console.log(`[fullMoveStart] 记录移动: 玩家${message.player}棋子${message.chessIndex} 位置${chessData.position} 骰子${message.diceValue}`);
+    }
+
+    // _pendingMove 记录移动意图，防止重选和切换回合
+    target.gameData._pendingMove = {
+      player: message.player,
+      chessIndex: message.chessIndex,
+      targetPosition: computedTarget,
+      timestamp: Date.now()
+    };
+  }
+
   target.broadcast({
     type: 'fullMoveStart',
     playerId,
@@ -2827,6 +2882,7 @@ function handleFullMoveStart(ws, playerId, message) {
     chessIndex: message.chessIndex,
     diceValue: message.diceValue,
     fromPosition: message.fromPosition,
+    targetPosition: message.targetPosition,
     timestamp: message.timestamp
   });
 }
@@ -2838,6 +2894,11 @@ function handleFinalMoveResult(ws, playerId, message) {
 
   // 如果是游戏会话，更新服务器端的棋子状态
   if (target.gameData && target.gameData.playerChess) {
+    // 标记骰子值已被消耗（重连后不可再用同一骰子值选棋）
+    target.gameData.diceValueConsumed = true;
+    // 清除待处理移动标记（finalMoveResult 到达说明移动已完成）
+    delete target.gameData._pendingMove;
+
     const player = message.player;
     const chessIndex = message.chessIndex;
     const finalPosition = message.finalPosition;
@@ -2947,9 +3008,125 @@ function handleDiceAnimationStart(ws, playerId, message) {
   const target = getBroadcastTarget(playerId);
   if (!target) throw new Error('玩家不在任何房间或游戏会话中');
 
+  // 如果消息携带了骰子值，立即进行完整的骰子结果处理
+  // 这样即使投掷者在 500ms 动画期间刷新页面，服务端和其他客户端已有骰子值和正确状态
+  if (message.diceValue !== undefined && message.diceValue !== null) {
+    const gameSession = roomManager.getPlayerGameSession(playerId);
+    if (gameSession && gameSession.gameData) {
+      // 防串号：只允许当前回合玩家掷骰
+      if (gameSession.gameData.currentPlayer != null && message.triggerPlayerNumber !== undefined && message.triggerPlayerNumber !== gameSession.gameData.currentPlayer) {
+        console.warn(`[diceAnimationStart] 忽略非当前玩家掷骰: msg.triggerPlayerNumber=${message.triggerPlayerNumber}, currentPlayer=${gameSession.gameData.currentPlayer}`);
+        return;
+      }
+
+      // === 保存骰子结果核心状态 ===
+      gameSession.gameData.diceValue = message.diceValue;
+      gameSession.gameData.gamePhase = 'moving';
+      gameSession.gameData.diceValueConsumed = false;
+
+      // 首个操作后，标记游戏正式开始
+      if (!gameSession.gameData.gameOfficiallyStarted) {
+        gameSession.gameData.gameOfficiallyStarted = true;
+        console.log(`[diceAnimationStart] 首发玩家 ${message.triggerPlayerNumber} 已操作，游戏正式开始`);
+      }
+
+      // 设置 fallback 定时器：1秒后如果 diceRoll 没到，自动补发结果给其他客户端
+      // 防止投掷者刷新导致其他客户端一直闪烁
+      if (gameSession._diceRollFallbackTimer) {
+        clearTimeout(gameSession._diceRollFallbackTimer);
+      }
+      gameSession._diceRollFallbackTimer = setTimeout(() => {
+        if (!gameSession) return;
+
+        // 检查：如果骰子值已被消耗（玩家已移动或无法移动），说明游戏已推进，不再补发
+        if (gameSession.gameData?.gamePhase === 'moving' && !gameSession.gameData?.diceValueConsumed) {
+          const diceVal = gameSession.gameData.diceValue;
+          const currentPlayer = message.triggerPlayerNumber;
+          console.log(`[Fallback] 玩家${currentPlayer}的 diceRoll 超时，自动补发结果给其他客户端`);
+
+          target.broadcast({
+            type: 'diceRoll',
+            playerId,
+            player: currentPlayer,
+            diceValue: diceVal,
+            consecutiveSixes: gameSession.gameData.consecutiveSixes || 0,
+            canReroll: gameSession.gameData.canReroll || false,
+            justRolledSix: gameSession.gameData.justRolledSix || false,
+            timestamp: Date.now()
+          });
+
+          // Fallback 额外处理：如果骰子值无法移动任何棋子（且无连投奖励），自动切换玩家
+          // 投掷者刷新页面导致 syncDiceRoll 未到达，服务端需在此推进游戏状态
+          if (!gameSession.gameData.canReroll) {
+            const chessArray = gameSession.gameData.playerChess?.[currentPlayer];
+            if (chessArray && Array.isArray(chessArray)) {
+              const canLaunch = diceVal % 2 === 0;
+              const hasMovable = chessArray.some(c => {
+                if (c.finished) return false;
+                const pos = c.position;
+                if (pos === undefined || pos === null || pos === -1) return canLaunch;
+                if (pos >= 0 && pos <= 50) return true;
+                if (pos >= 51 && pos < 56) return true;
+                return false;
+              });
+
+              if (!hasMovable) {
+                console.log(`[Fallback] 玩家${currentPlayer}骰子点数${diceVal}无法移动任何棋子，自动切换`);
+
+                // 标记骰子值已消耗
+                gameSession.gameData.diceValueConsumed = true;
+
+                // 广播无法移动消息
+                target.broadcast({
+                  type: 'noMovableChess',
+                  player: currentPlayer,
+                  diceValue: diceVal,
+                  timestamp: Date.now(),
+                  playerId
+                });
+
+                // 计算并切换到下一个玩家（逻辑参考 handleNoMovableChess）
+                const allPlayers = Array.from(gameSession.players.values());
+                const onlinePlayers = allPlayers
+                  .map(p => p.color)
+                  .sort((a, b) => a - b);
+                if (onlinePlayers.length > 0) {
+                  let currentIndex = onlinePlayers.indexOf(currentPlayer);
+                  if (currentIndex === -1) currentIndex = -1;
+                  const nextIndex = (currentIndex + 1) % onlinePlayers.length;
+                  const nextPlayer = onlinePlayers[nextIndex];
+
+                  gameSession.gameData.currentPlayer = nextPlayer;
+                  gameSession.gameData.gamePhase = 'rolling';
+                  gameSession.gameData.diceValue = 0;
+                  gameSession.gameData.canReroll = false;
+                  gameSession.gameData.justRolledSix = false;
+                  gameSession.gameData.consecutiveSixes = 0;
+
+                  setTimeout(() => {
+                    gameSession.broadcast({
+                      type: 'playerTurnChange',
+                      newPlayer: nextPlayer,
+                      timestamp: Date.now()
+                    });
+                  }, 600);
+                }
+              }
+            }
+          }
+        }
+
+        gameSession._diceRollFallbackTimer = null;
+      }, 1000);
+    }
+  }
+
+  // 广播骰子动画开始（包含 triggerPlayerNumber 用于客户端动画逻辑）
   target.broadcast({
     type: 'diceAnimationStart',
     playerId: message.triggerPlayerId || playerId,
+    triggerPlayerNumber: message.triggerPlayerNumber,
+    diceValue: message.diceValue,
     timestamp: message.timestamp
   });
 }
@@ -3078,6 +3255,111 @@ function handleRejoinGameSession(ws, playerId, message) {
     return;
   }
 
+  // 重连冷却限制：防止玩家通过频繁刷新页面干扰其他玩家游戏流程
+  // 2秒内多次重连跳过非必要的重复处理，但连接状态（ws、isConnected、disconnectedAt）必须更新
+  if (!roomManager._rejoinCooldowns) roomManager._rejoinCooldowns = new Map();
+  const now = Date.now();
+  const lastRejoin = roomManager._rejoinCooldowns.get(playerId) || 0;
+  if (now - lastRejoin < 2000) {
+    console.log(`玩家 ${playerId} 重连过于频繁（${now - lastRejoin}ms内），跳过完整重连处理`);
+
+    // 基础连接状态必须更新，防止断线定时器误判
+    const player = gameSession.players.get(playerId);
+    if (player) {
+      player.isConnected = true;
+      player.ws = ws;
+      player.disconnectedAt = null;
+
+      // 同步更新 roomManager 的连接引用（否则 boardSyncData 无法转发）
+      roomManager.setPlayerConnection(playerId, ws);
+      roomManager.playerSessions.set(playerId, gameSessionId);
+
+      // 同步更新房间引用
+      if (gameSession.roomCode) {
+        const room = roomManager.getRoom(gameSession.roomCode);
+        if (room) {
+          const roomPlayer = room.players.get(playerId);
+          if (roomPlayer) {
+            roomPlayer.isConnected = true;
+            roomPlayer.ws = ws;
+            delete roomPlayer.disconnectedAt;
+          }
+        }
+      }
+
+      // 取消断线去抖定时器（如果有）
+      if (gameSession._disconnectDebounceTimers?.has(playerId)) {
+        clearTimeout(gameSession._disconnectDebounceTimers.get(playerId));
+        gameSession._disconnectDebounceTimers.delete(playerId);
+      }
+    }
+
+    // 广播给其他玩家：该玩家已重连
+    gameSession.broadcast({
+      type: 'playerReconnected',
+      playerId,
+      timestamp: Date.now()
+    });
+
+    // 冷却路径也检测待处理移动，防止 _pendingMove 卡死
+    const coolingPlayer = gameSession.players.get(playerId);
+    const coolingGd = gameSession.gameData;
+    if (coolingPlayer && coolingGd && coolingGd._pendingMove && coolingGd.currentPlayer === coolingPlayer.color && !coolingPlayer.isAI) {
+      const pending = coolingGd._pendingMove;
+      console.log(`[重连冷却] 检测到玩家${coolingPlayer.color}的移动未完成(棋子${pending.chessIndex})，清理状态`);
+      // 不再推进棋子位置——boardSync 会从参考玩家纠正
+      delete coolingGd._pendingMove;
+      coolingGd.diceValueConsumed = false;
+      coolingGd.diceValue = 0;
+      coolingGd.canReroll = false;
+      coolingGd.justRolledSix = false;
+      coolingGd.consecutiveSixes = 0;
+      // 切换到下一玩家
+      const allPlayers = Array.from(gameSession.players.values());
+      const onlinePlayers = allPlayers.map(p => p.color).sort((a, b) => a - b);
+      if (onlinePlayers.length > 0) {
+        const currentIndex = onlinePlayers.indexOf(coolingPlayer.color);
+        const nextIndex = (currentIndex + 1) % onlinePlayers.length;
+        const nextPlayer = onlinePlayers[nextIndex];
+        coolingGd.currentPlayer = nextPlayer;
+        coolingGd.gamePhase = 'rolling';
+        console.log(`[重连冷却] 切换到玩家${nextPlayer}`);
+        // 延迟广播回合切换
+        setTimeout(() => {
+          gameSession.broadcast({
+            type: 'playerTurnChange',
+            newPlayer: nextPlayer,
+            timestamp: Date.now()
+          });
+        }, 600);
+      }
+    }
+
+    // 仍然发送最新游戏数据给重连玩家
+    ws.send(JSON.stringify({ type: 'gameSessionConnected', playerId, gameSessionId, gameSession: gameSession.toJSON() }));
+    
+    // 冷却路径也触发棋盘同步
+    setTimeout(() => {
+      for (const [id, p] of gameSession.players) {
+        if (id !== playerId && !p.isAI && p.isConnected) {
+          const pws = roomManager.getPlayerConnection(id);
+          if (pws && pws.readyState === WebSocket.OPEN) {
+            pws.send(JSON.stringify({
+              type: 'boardSyncRequest',
+              targetPlayerId: playerId,
+              timestamp: Date.now()
+            }));
+            console.log(`[棋盘同步] 冷却重连后请求玩家${id}发送棋盘状态给${playerId}`);
+            break;
+          }
+        }
+      }
+    }, 500);
+    
+    return;
+  }
+  roomManager._rejoinCooldowns.set(playerId, now);
+
   // 重新关联会话
   roomManager.playerSessions.set(playerId, gameSessionId);
   roomManager.setPlayerConnection(playerId, ws);
@@ -3116,6 +3398,30 @@ function handleRejoinGameSession(ws, playerId, message) {
         room.checkEmptyRoom();
       }
     }
+
+    // === 人类玩家重连后自动恢复暂停的游戏 ===
+    // 如果游戏处于暂停状态（因所有人类玩家离线而自动暂停），现在人类玩家回来了，恢复游戏
+    if (gameSession.gameData && gameSession.gameData.isPaused) {
+      console.log(`[重连] 游戏处于暂停状态，检测到人类玩家${playerId}重连，自动恢复游戏`);
+      gameSession.gameData.isPaused = false;
+      if (gameSession.gameData.gamePhase === 'paused') {
+        gameSession.gameData.gamePhase = gameSession.gameData.gamePhaseBeforePause || 'rolling';
+      }
+      // 重置进度条时间（当前玩家为谁就重置谁）
+      if (player && player.color === gameSession.gameData.currentPlayer) {
+        const newThinkingStartTime = Date.now();
+        gameSession.gameData.thinkingStartTime = newThinkingStartTime;
+        console.log(`[重连] 暂停恢复后重置进度条时间: ${newThinkingStartTime}`);
+      }
+      // 广播游戏恢复消息给所有玩家（包括重连者将会在 gameSessionConnected 中同步）
+      gameSession.broadcast({
+        type: 'gameResumed',
+        playerId,
+        reason: 'human_player_reconnected',
+        timestamp: Date.now()
+      });
+    }
+
   }
 
   // 更新其他玩家的连接状态（仅连接状态，不要修改音频加载状态）
@@ -3132,6 +3438,50 @@ function handleRejoinGameSession(ws, playerId, message) {
       }
     }
   });
+
+  // === 检测待处理移动完成状态：如果玩家在移动中刷新（fullMoveStart已执行但finalMoveResult未到），自动推进 ===
+  const gd = gameSession.gameData;
+  if (player && gd && gd._pendingMove && gd.currentPlayer === player.color && !player.isAI) {
+    const pending = gd._pendingMove;
+    console.log(`[重连] 检测到玩家${player.color}的移动未完成(棋子${pending.chessIndex})，清理状态`);
+
+    // 不再推进棋子位置——boardSync 会从参考玩家纠正
+    delete gd._pendingMove;
+
+    // 统一重置所有回合状态（不区分是否连投奖励，避免与客户端 restoreGameState 或 playerTurnChange 的并发冲突）
+    gd.diceValueConsumed = false;
+    gd.diceValue = 0;
+    gd.canReroll = false;
+    gd.justRolledSix = false;
+    gd.consecutiveSixes = 0;
+
+    // 切换到下一个玩家
+    const allPlayers = Array.from(gameSession.players.values());
+    const onlinePlayers = allPlayers
+      .map(p => p.color)
+      .sort((a, b) => a - b);
+
+    if (onlinePlayers.length > 0) {
+      let currentIndex = onlinePlayers.indexOf(player.color);
+      if (currentIndex === -1) currentIndex = -1;
+      const nextIndex = (currentIndex + 1) % onlinePlayers.length;
+      const nextPlayer = onlinePlayers[nextIndex];
+
+      gd.currentPlayer = nextPlayer;
+      gd.gamePhase = 'rolling';
+
+      console.log(`[重连] 检测到移动未完成，切换到玩家${nextPlayer}`);
+
+      // 延迟广播回合切换，确保 gameSessionConnected 先到达客户端完成 restoreGameState
+      setTimeout(() => {
+        gameSession.broadcast({
+          type: 'playerTurnChange',
+          newPlayer: nextPlayer,
+          timestamp: Date.now()
+        });
+      }, 600);
+    }
+  }
 
   // 发送重连确认
   console.log(`[重连] 发送gameSessionConnected给玩家${playerId}，currentPlayer=${gameSession.gameData.currentPlayer}`);
@@ -3156,9 +3506,31 @@ function handleRejoinGameSession(ws, playerId, message) {
     }));
   }
 
-  // 广播重连
+  // 重连后自动触发棋盘同步：找另一个在线玩家发状态给重连者
+  setTimeout(() => {
+    for (const [id, p] of gameSession.players) {
+      if (id !== playerId && !p.isAI && p.isConnected) {
+        const pws = roomManager.getPlayerConnection(id);
+        if (pws && pws.readyState === WebSocket.OPEN) {
+          pws.send(JSON.stringify({
+            type: 'boardSyncRequest',
+            targetPlayerId: playerId,
+            timestamp: Date.now()
+          }));
+          console.log(`[棋盘同步] 重连后自动请求玩家${id}发送棋盘状态给${playerId}`);
+          break;
+        }
+      }
+    }
+  }, 500);
+
+  // 广播重连（只发送玩家列表，不发送全量 gameData 减轻其他客户端解析负担）
   console.log(`[重连] 玩家${playerId}重连成功，广播playerReconnected给其他玩家`);
 
+  const playersArray = Array.from(gameSession.players.values()).map(p => ({
+    id: p.id, color: p.color, nickname: p.nickname, emoji: p.emoji,
+    isHost: p.isHost || false, isConnected: p.isConnected, isAI: p.isAI
+  }));
   for (const [otherPlayerId] of gameSession.players) {
     if (otherPlayerId === playerId) continue;
     const otherWs = roomManager.getPlayerConnection(otherPlayerId);
@@ -3166,26 +3538,21 @@ function handleRejoinGameSession(ws, playerId, message) {
       otherWs.send(JSON.stringify({
         type: 'playerReconnected',
         playerId,
-        gameSession: gameSession.toJSON()
+        players: playersArray
       }));
     }
   }
 
-  // 如果重连的玩家是当前玩家，重置进度条并广播给所有玩家
-  // 但如果游戏处于暂停状态，就不应该重置和广播进度条
-  if (wasDisconnected && gameSession.gameData && player && player.color === gameSession.gameData.currentPlayer && !gameSession.gameData.isPaused) {
-    const newThinkingStartTime = Date.now();
-    gameSession.gameData.thinkingStartTime = newThinkingStartTime;
-    console.log(`[重连] 当前玩家${player.color}重连，重置进度条时间: ${newThinkingStartTime}`);
-
-    // 广播进度条重置消息给所有玩家
-    gameSession.broadcast({
-      type: 'progressBarReset',
-      playerId,
-      playerColor: player.color,
-      thinkingStartTime: newThinkingStartTime,
-      timestamp: Date.now()
-    });
+  // 如果游戏处于激活状态（非暂停），确保 gameData.thinkingStartTime 已设置
+  //（progressBarStart 已在第3145行保存到 gameData，但如果还没有 progressBarStart，
+  // 设置一个当前时间作为 fallback）
+  if (wasDisconnected && gameSession.gameData && !gameSession.gameData.isPaused) {
+    if (!gameSession.gameData.thinkingStartTime) {
+      gameSession.gameData.thinkingStartTime = Date.now();
+      console.log(`[重连] 无 thinkingStartTime，设置当前时间: ${gameSession.gameData.thinkingStartTime}`);
+    } else {
+      console.log(`[重连] 现有 thinkingStartTime=${gameSession.gameData.thinkingStartTime}，传给重连者`);
+    }
   }
 
   // 发送重连消息
@@ -3206,6 +3573,28 @@ function handleRejoinGameSession(ws, playerId, message) {
         }));
       }
     }
+  }
+
+  // 如果重连时存在未消耗的骰子值（玩家在骰子动画过程中刷新），补发 diceRoll 给重连者
+  // 让重连客户端立即看到正确的骰子状态，无需等待 fallback 定时器（1秒后）
+  // 注意：不修改 gameData 中的 canReroll/justRolledSix/consecutiveSixes，
+  // 这些值已由 handleDiceRoll 正确设置。restoreGameState 也通过 diceValueConsumed
+  // 正确区分"刚掷完未移动"和"移动完成可重投"两种状态。
+  if (gameSession.gameData && gameSession.gameData.diceValue > 0 &&
+      gameSession.gameData.gamePhase === 'moving' && !gameSession.gameData.diceValueConsumed &&
+      player && player.color === gameSession.gameData.currentPlayer) {
+    const dd = gameSession.gameData;
+    console.log(`[重连] 检测到未消耗骰子值 ${dd.diceValue}（canReroll=${!!dd.canReroll} consecutiveSixes=${dd.consecutiveSixes||0}），补发 diceRoll 给玩家${playerId}`);
+    ws.send(JSON.stringify({
+      type: 'diceRoll',
+      playerId,
+      player: dd.currentPlayer,
+      diceValue: dd.diceValue,
+      consecutiveSixes: dd.consecutiveSixes || 0,
+      canReroll: dd.canReroll || false,
+      justRolledSix: dd.justRolledSix || false,
+      timestamp: Date.now()
+    }));
   }
 
   // 检查当前房主是否在线，如果不在线且当前重连的是真实玩家，则接管房主
@@ -3305,6 +3694,7 @@ function handlePlayerTurnChange(ws, playerId, message) {
       target.gameData.currentPlayer = newPlayer;
       target.gameData.gamePhase = 'rolling';
       target.gameData.diceValue = 0;
+      target.gameData.diceValueConsumed = false; // 新玩家回合，骰子未消耗
       // 重置连投奖励状态
       target.gameData.canReroll = false;
       target.gameData.justRolledSix = false;
@@ -3341,6 +3731,9 @@ function handleNoMovableChess(ws, playerId, message) {
 
   // 只有GameSession才有完整的玩家列表（包括AI bot）
   if (gameSession && gameSession.gameData) {
+    // 标记骰子值已消耗（当前玩家已用完本回合的骰子）
+    gameSession.gameData.diceValueConsumed = true;
+
     // 获取所有在线玩家的color列表并排序（包括AI和在线的人类玩家）
     const allPlayers = Array.from(gameSession.players.values());
     console.log(`[调试] 所有玩家:`, allPlayers.map(p => ({ id: p.id, color: p.color, isAI: p.isAI, isConnected: p.isConnected })));
@@ -4072,8 +4465,14 @@ const handleAudioLoaded = withGameSessionValidation((ws, playerId, message, game
 
   // 所有真实玩家加载完成
   if (gameSession.audioLoadedPlayers.size === realPlayerCount) {
-    console.log(`[音频加载] 游戏会话 ${gameSession.gameSessionId} 所有玩家已加载，发送 allAudioLoaded`);
-    gameSession.broadcast({ type: 'allAudioLoaded', gameSessionId: gameSession.gameSessionId });
+    // 如果游戏已经开始，说明这是重连补发的 audioLoaded，不广播 allAudioLoaded
+    // 避免干扰其他玩家正在进行的游戏流程（如AI操作、骰子动画等）
+    if (gameSession.gameData?.gameOfficiallyStarted) {
+      console.log(`[音频加载] 游戏已开始，跳过 allAudioLoaded 广播（防止干扰进行中的游戏流程）`);
+    } else {
+      console.log(`[音频加载] 游戏会话 ${gameSession.gameSessionId} 所有玩家已加载，发送 allAudioLoaded`);
+      gameSession.broadcast({ type: 'allAudioLoaded', gameSessionId: gameSession.gameSessionId });
+    }
   }
 });
 
@@ -4439,7 +4838,57 @@ function cleanupOrphanedResources() {
   };
 }
 
-// 静态文件服务
+// 棋盘状态同步请求：转发给另一个在线玩家
+function handleBoardSyncRequest(ws, playerId, message) {
+  const gameSession = roomManager.getPlayerGameSession(playerId);
+  if (!gameSession) {
+    ws.send(JSON.stringify({ type: 'error', message: '游戏会话不存在' }));
+    return;
+  }
+
+  // 找一个其他在线真实玩家作为参考
+  for (const [id, p] of gameSession.players) {
+    if (id !== playerId && !p.isAI && p.isConnected) {
+      const pws = roomManager.getPlayerConnection(id);
+      if (pws && pws.readyState === WebSocket.OPEN) {
+        pws.send(JSON.stringify({
+          type: 'boardSyncRequest',
+          targetPlayerId: playerId,
+          timestamp: Date.now()
+        }));
+        console.log(`[棋盘同步] 请求玩家${id}发送棋盘状态给${playerId}`);
+        return;
+      }
+    }
+  }
+
+  // 没有其他玩家，通知重连者跳过
+  ws.send(JSON.stringify({
+    type: 'boardSyncData',
+    playerChess: null,
+    noOtherPlayer: true,
+    timestamp: Date.now()
+  }));
+}
+
+// 棋盘状态同步响应：转发给目标玩家
+function handleBoardSyncData(ws, playerId, message) {
+  const targetPlayerId = message.targetPlayerId;
+  const targetWs = roomManager.getPlayerConnection(targetPlayerId);
+  if (targetWs && targetWs.readyState === WebSocket.OPEN) {
+    targetWs.send(JSON.stringify({
+      type: 'boardSyncData',
+      playerChess: message.playerChess,
+      noOtherPlayer: false,
+      timestamp: Date.now()
+    }));
+    console.log(`[棋盘同步] 转发玩家${playerId}的棋盘状态给${targetPlayerId}`);
+  } else {
+    console.warn(`[棋盘同步] 无法转发给${targetPlayerId}：连接状态=${targetWs ? targetWs.readyState : 'null'}`);
+  }
+}
+
+// -------------------------- 静态文件服务 --------------------------
 app.use(express.static('.'));
 
 // -------------------------- 定时清理任务 --------------------------

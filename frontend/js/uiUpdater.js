@@ -530,9 +530,10 @@ class UIUpdater {
 
         // 每100ms更新一次进度条
         this.progressUpdateInterval = setInterval(() => {
-            // 如果游戏暂停，或者正在加载中，停止进度条更新
+            // 如果游戏暂停，或者正在加载中，跳过本轮更新
             const isLoading = window.audioManager && !window.audioManager.allPlayersAudioLoaded;
-            if (gameState.getIsPaused() || isLoading) {
+            const isPaused = gameState.getIsPaused();
+            if (isPaused || isLoading) {
                 return;
             }
 

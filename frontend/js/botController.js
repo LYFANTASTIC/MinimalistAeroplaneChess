@@ -1502,8 +1502,8 @@ class BotController {
             // 延迟清除处理标志，确保异步操作完成
             setTimeout(() => {
                 this.isProcessing = false;
-                // 尝试触发下一 bot
-                if (window.eventHandler) {
+                // 联机模式靠 playerTurnChange 驱动 AI，不自触发避免竞态
+                if (!gameState.getIsOnlineMultiplayer() && window.eventHandler) {
                     window.eventHandler.triggerBotOperationIfNeeded();
                 }
             }, 300); // 300ms后清除标志，防止过快的重复触发
