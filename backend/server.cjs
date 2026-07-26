@@ -614,6 +614,15 @@ class Room {
         console.log(`房间 ${this.code} 游戏已暂停，5分钟后若无人类玩家重连将销毁`);
         this.startEmptyRoomTimer();
 
+        // 同时更新 gameData 中的暂停状态
+        const session = roomManager.getGameSession(this.gameSessionId);
+        if (session && session.gameData) {
+          session.gameData.isPaused = true;
+          session.gameData.pauseReason = 'all_humans_disconnected';
+          session.gameData.gamePhaseBeforePause = session.gameData.gamePhase;
+          session.gameData.gamePhase = 'paused';
+        }
+
         // 广播游戏暂停消息
         this.broadcast({
           type: 'gameAutoPaused',
@@ -3399,11 +3408,12 @@ function handleRejoinGameSession(ws, playerId, message) {
       }
     }
 
-    // === 人类玩家重连后自动恢复暂停的游戏 ===
-    // 如果游戏处于暂停状态（因所有人类玩家离线而自动暂停），现在人类玩家回来了，恢复游戏
-    if (gameSession.gameData && gameSession.gameData.isPaused) {
-      console.log(`[重连] 游戏处于暂停状态，检测到人类玩家${playerId}重连，自动恢复游戏`);
+    // === 人类玩家重连后自动恢复自动暂停的游戏 ===
+    // 只有因所有人类玩家离线导致的自动暂停才恢复，手动暂停不自动恢复
+    if (gameSession.gameData && gameSession.gameData.isPaused && gameSession.gameData.pauseReason === 'all_humans_disconnected') {
+      console.log(`[重连] 游戏处于自动暂停状态，检测到人类玩家${playerId}重连，自动恢复游戏`);
       gameSession.gameData.isPaused = false;
+      delete gameSession.gameData.pauseReason;
       if (gameSession.gameData.gamePhase === 'paused') {
         gameSession.gameData.gamePhase = gameSession.gameData.gamePhaseBeforePause || 'rolling';
       }
@@ -3981,6 +3991,7 @@ function handleGamePause(ws, playerId, message) {
 
   if (target instanceof GameSession && target.gameData) {
     target.gameData.isPaused = true;
+    target.gameData.pauseReason = 'manual';
     target.gameData.gamePhaseBeforePause = target.gameData.gamePhase;
     target.gameData.gamePhase = 'paused';
   }
@@ -3999,6 +4010,7 @@ function handleGameResume(ws, playerId, message) {
 
   if (target instanceof GameSession && target.gameData) {
     target.gameData.isPaused = false;
+    delete target.gameData.pauseReason;
     if (target.gameData.gamePhase === 'paused') {
       target.gameData.gamePhase = target.gameData.gamePhaseBeforePause || 'rolling';
     }
