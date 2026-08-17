@@ -51,7 +51,7 @@ Changed files:
 - Modify: `backend/package.json`
 - Modify: root `package.json`
 
-- [ ] Write the formula tests first.
+- [x] Write the formula tests first.
 
 ```js
 const test = require('node:test');
@@ -79,8 +79,8 @@ test('invalid reward facts are rejected', () => {
 });
 ```
 
-- [ ] Run `npm --workspace backend test` and confirm it fails because the module/script does not exist.
-- [ ] Implement the pure reward module. It must accept facts, never a client-supplied reward, validate finite values and allowed piece counts, and round with `Math.round((value + Number.EPSILON) * 100) / 100`.
+- [x] Run `npm --workspace backend test` and confirm it fails because the module/script does not exist.
+- [x] Implement the pure reward module. It must accept facts, never a client-supplied reward, validate finite values and allowed piece counts, and round with `Math.round((value + Number.EPSILON) * 100) / 100`.
 
 ```js
 const PIECE_MULTIPLIERS = Object.freeze({ 1: 1, 2: 1.35, 3: 1.15, 4: 1 });
@@ -95,10 +95,10 @@ function calculatePlaneDefeatReward({ progressBefore, progressAfter, pieceCount 
 }
 ```
 
-- [ ] Add `ITEMS_ENABLED = false` in both feature files with a short comment that restoring items requires enabling both server and browser flags.
-- [ ] Add backend scripts: `"test": "node --test test/*.test.cjs"` and root scripts `"test:backend"`, `"test"`.
-- [ ] Run the formula tests and expect all cases to pass.
-- [ ] Commit: `test: define account reward rules`
+- [x] Add `ITEMS_ENABLED = false` in both feature files with a short comment that restoring items requires enabling both server and browser flags.
+- [x] Add backend scripts: `"test": "node --test test/*.test.cjs"` and root scripts `"test:backend"`, `"test"`.
+- [x] Run the formula tests and expect all cases to pass.
+- [x] Commit: `test: define account reward rules`
 
 ## Task 2: Add the PostgreSQL schema and migration runner
 
