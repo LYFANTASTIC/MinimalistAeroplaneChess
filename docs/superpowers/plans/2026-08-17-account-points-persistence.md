@@ -111,9 +111,9 @@ function calculatePlaneDefeatReward({ progressBefore, progressAfter, pieceCount 
 - Modify: `backend/package.json`
 - Modify: `.env.example`
 
-- [ ] Write a migration structure test that loads the SQL as text and asserts all seven tables, required unique indexes, foreign keys, numeric scales, and constraints are present.
-- [ ] Run the test and confirm it fails because the migration is absent.
-- [ ] Add `pg` to backend dependencies and create a lazy pool. Production must require `DATABASE_URL`; tests may inject a pool. Configure `max`, `idleTimeoutMillis`, `connectionTimeoutMillis`, and SSL from `DATABASE_SSL`.
+- [x] Write a migration structure test that loads the SQL as text and asserts all seven tables, required unique indexes, foreign keys, numeric scales, and constraints are present.
+- [x] Run the test and confirm it fails because the migration is absent.
+- [x] Add `pg` to backend dependencies and create a lazy pool. Production must require `DATABASE_URL`; tests may inject a pool. Configure `max`, `idleTimeoutMillis`, `connectionTimeoutMillis`, and SSL from `DATABASE_SSL`.
 
 ```js
 const { Pool } = require('pg');
@@ -130,11 +130,11 @@ function createPool(env = process.env) {
 }
 ```
 
-- [ ] Create `app.schema_migrations`, enable `citext` and `pgcrypto`, then create `app.users`, `app.user_wallets`, `app.user_stats`, `app.matches`, `app.match_players`, `app.match_events`, and `app.points_ledger` exactly as approved in the design spec.
-- [ ] Add an ordered migration runner that uses a PostgreSQL advisory lock, applies each file once in a transaction, and records its filename and checksum.
-- [ ] Add `db:migrate` and `db:health` scripts. Document `DATABASE_URL`, `DATABASE_SSL`, and `DATABASE_POOL_MAX` in `.env.example` without real credentials.
-- [ ] Run `npm --workspace backend test` and confirm schema structure tests pass.
-- [ ] Commit: `feat: add account persistence schema`
+- [x] Create `app.schema_migrations`, enable `citext` and `pgcrypto`, then create `app.users`, `app.user_wallets`, `app.user_stats`, `app.matches`, `app.match_players`, `app.match_events`, and `app.points_ledger` exactly as approved in the design spec.
+- [x] Add an ordered migration runner that uses a PostgreSQL advisory lock, applies each file once in a transaction, and records its filename and checksum.
+- [x] Add `db:migrate` and `db:health` scripts. Document `DATABASE_URL`, `DATABASE_SSL`, and `DATABASE_POOL_MAX` in `.env.example` without real credentials.
+- [x] Run `npm --workspace backend test` and confirm schema structure tests pass.
+- [x] Commit: `feat: add account persistence schema`
 
 ## Task 3: Replace JSON account access with an asynchronous repository
 
