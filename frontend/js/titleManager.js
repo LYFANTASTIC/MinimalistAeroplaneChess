@@ -3,6 +3,20 @@
  * 称号优先级：概率称号 > 唯一称号 > 默认称号
  */
 import { activePlayerManager } from './activePlayerManager.js';
+import { ITEMS_ENABLED } from './config/features.js';
+
+const ITEM_TITLE_IDS = new Set([
+    'dimension_traveler', 'koi_fish', 'philanthropist',
+    'destiny_child', 'unlucky_bear', 'skill_master'
+]);
+
+export function isItemTitle(title) {
+    return ITEM_TITLE_IDS.has(title?.id);
+}
+
+export function filterAvailableTitles(titles = []) {
+    return ITEMS_ENABLED ? titles : titles.filter(title => !isItemTitle(title));
+}
 
 class TitleManager {
     constructor() {
@@ -214,9 +228,10 @@ class TitleManager {
 
         // 欢乐模式：过滤掉不适配的称号，再将"击败"替换为"碰撞"
         const disabledIds = gameState?.isHappyMode?.() ? this._getHappyModeDisabledIds() : new Set();
-        return titles
+        const availableTitles = filterAvailableTitles(titles)
             .filter(t => !disabledIds.has(t.id))
             .map(t => this._adjustTitleForHappyMode(t, gameState));
+        return availableTitles.length ? availableTitles : [this.TITLES.DEFAULT];
     }
 
     /**

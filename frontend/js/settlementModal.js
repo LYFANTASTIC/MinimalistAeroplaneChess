@@ -7,6 +7,7 @@ import { activePlayerManager } from './activePlayerManager.js';
 import { reconnectManager } from './reconnectManager.js';
 import { titleManager } from './titleManager.js';
 import { aiTakeoverManager } from './aiTakeoverManager.js';
+import { accountPoints } from './accountPoints.js';
 
 function getDisplayName(player) {
     const cleanName = aiTakeoverManager?.originalNames?.[player];
@@ -297,8 +298,8 @@ class SettlementModal {
         // 渲染反弹格数统计
         html += this.renderBounceStatistics();
 
-        // 渲染道具模式统计
-        html += this.renderSkillStatistics();
+        // 渲染本局获得的永久账户积分
+        html += this.renderAccountPointsStatistics();
 
         // 渲染骰子投掷统计表格
         html += this.renderDiceStatistics();
@@ -747,6 +748,34 @@ class SettlementModal {
 
         html += '</div>';
         return html;
+    }
+
+    renderAccountPointsStatistics() {
+        if (!this.gameState) return '';
+        const earnedPoints = accountPoints.getAllMatchPoints();
+        const rewardedPlayers = Object.keys(earnedPoints).map(Number).filter(Number.isFinite);
+        if (!rewardedPlayers.length) return '';
+        const items = rewardedPlayers.map(player => ({
+            player,
+            value: accountPoints.getMatchPoints(player),
+            playerName: getDisplayName(player)
+        }));
+
+        const maxPoints = Math.max(...items.map(item => item.value), 1);
+        return `<div class="distance-stats-section account-points-stats-section">
+            <h4 class="chart-title">本局账户积分</h4>
+            <div class="distance-bars-container">
+                ${items.map(item => `<div class="distance-bar-item">
+                    <div class="distance-player-info">
+                        <span class="distance-player-name player-${item.player}">${item.playerName}</span>
+                        <span class="distance-value">${item.value.toLocaleString('zh-CN', { maximumFractionDigits: 2 })} <small>分</small></span>
+                    </div>
+                    <div class="distance-bar-bg">
+                        <div class="distance-bar-fill player-${item.player}" style="width: ${(item.value / maxPoints) * 100}%"></div>
+                    </div>
+                </div>`).join('')}
+            </div>
+        </div>`;
     }
 
     /**

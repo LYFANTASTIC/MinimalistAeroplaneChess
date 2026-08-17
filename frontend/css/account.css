@@ -204,6 +204,31 @@ body.account-page {
 .profile-facts > div { display: grid; grid-template-columns: 74px 1fr; padding: 11px 13px; background: rgba(255,255,255,.72); font-size: 12px; }
 .profile-facts dt { color: var(--account-muted); }
 .profile-facts dd { min-width: 0; margin: 0; color: var(--account-ink); text-align: right; overflow-wrap: anywhere; }
+.account-progress, .history-section { margin: 22px 0; }
+.section-heading { display: flex; align-items: end; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.section-heading p { margin: 0 0 3px; color: var(--account-muted); font-size: 10px; letter-spacing: .12em; }
+.section-heading h3 { margin: 0; color: var(--account-ink); font-size: 15px; }
+.section-heading > span { color: var(--account-muted); font-size: 10px; }
+.compact-heading { align-items: center; margin-bottom: 9px; }
+.stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.stat-card { min-width: 0; padding: 11px; border: 1px solid var(--account-line); border-radius: 12px; background: rgba(255,255,255,.62); }
+.stat-card.is-primary { grid-column: span 2; background: rgba(175,204,234,.2); border-color: rgba(127,169,210,.45); }
+.stat-card span { display: block; color: var(--account-muted); font-size: 10px; }
+.stat-card strong { display: block; margin-top: 5px; color: var(--account-ink); font-size: 20px; line-height: 1; overflow-wrap: anywhere; }
+.history-list { display: grid; gap: 7px; }
+.history-row { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 5px 10px; padding: 10px 11px; border: 1px solid rgba(61,53,48,.12); border-radius: 11px; background: rgba(255,255,255,.55); }
+.history-row > div:first-child { min-width: 0; display: grid; gap: 2px; }
+.history-row strong { color: var(--account-ink); font-size: 12px; }
+.history-row span, .history-row time { color: var(--account-muted); font-size: 10px; }
+.history-row time { grid-column: 1 / -1; }
+.history-metrics { display: grid; justify-items: end; gap: 2px; }
+.history-metrics b, .points-amount { color: #527b61; font-size: 12px; }
+.points-amount { align-self: center; }
+.points-amount.is-negative { color: #a4514c; }
+.history-empty { margin: 0; padding: 16px 10px; border-radius: 11px; background: rgba(255,255,255,.45); color: var(--account-muted); text-align: center; font-size: 11px; line-height: 1.5; }
+.history-empty.is-error { color: #9a4642; background: rgba(247,160,153,.12); }
+.load-more-button { width: 100%; margin-top: 8px; min-height: 34px; border: 1px solid var(--account-line); border-radius: 10px; background: rgba(255,255,255,.55); color: #638db6; font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; }
+.load-more-button:disabled { opacity: .55; cursor: wait; }
 .profile-actions { display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid var(--account-line); }
 .profile-action { padding: 10px 4px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--account-muted); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
 .profile-action.is-active { color: var(--account-ink); border-bottom-color: var(--player-3-border); }
@@ -231,6 +256,8 @@ body.account-page {
     #registerForm .agreement-option,
     #registerForm .account-primary-btn,
     #registerForm .auth-switch-copy { grid-column: auto; }
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    .stat-card.is-primary { grid-column: span 2; }
 }
 
 @media (max-width: 380px) {

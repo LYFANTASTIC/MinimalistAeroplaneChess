@@ -40,7 +40,7 @@
             <div class="account-feature-list" aria-label="账户功能">
                 <div><span class="feature-index mint">01</span><span>保留你的玩家身份</span></div>
                 <div><span class="feature-index blue">02</span><span>同步昵称与个人资料</span></div>
-                <div><span class="feature-index peach">03</span><span>为战绩与成就做好准备</span></div>
+                <div><span class="feature-index peach">03</span><span>记录战绩与账户积分</span></div>
             </div>
         </section>
 
@@ -152,6 +152,32 @@
                 <div><dt>邮箱</dt><dd id="profileEmail">—</dd></div>
                 <div><dt>加入时间</dt><dd id="profileCreatedAt">—</dd></div>
             </dl>
+
+            <section class="account-progress" aria-labelledby="progressTitle">
+                <div class="section-heading">
+                    <div><p>飞行档案</p><h3 id="progressTitle">账户进度</h3></div>
+                    <span id="accountDataStatus" role="status">正在同步…</span>
+                </div>
+                <div class="stats-grid" aria-label="账户统计">
+                    <article class="stat-card is-primary"><span>当前积分</span><strong id="statPointsBalance">—</strong></article>
+                    <article class="stat-card"><span>累计积分</span><strong id="statLifetimePoints">—</strong></article>
+                    <article class="stat-card"><span>对局</span><strong id="statGamesPlayed">—</strong></article>
+                    <article class="stat-card"><span>胜场</span><strong id="statGamesWon">—</strong></article>
+                    <article class="stat-card"><span>击落飞机</span><strong id="statPlanesDefeated">—</strong></article>
+                </div>
+            </section>
+
+            <section class="history-section" aria-labelledby="matchesTitle">
+                <div class="section-heading compact-heading"><h3 id="matchesTitle">最近对局</h3></div>
+                <div class="history-list" id="matchHistory" aria-live="polite"><p class="history-empty">正在加载对局记录…</p></div>
+                <button class="load-more-button" id="loadMoreMatches" type="button" hidden>查看更多对局</button>
+            </section>
+
+            <section class="history-section" aria-labelledby="pointsTitle">
+                <div class="section-heading compact-heading"><h3 id="pointsTitle">积分明细</h3></div>
+                <div class="history-list" id="pointsHistory" aria-live="polite"><p class="history-empty">正在加载积分记录…</p></div>
+                <button class="load-more-button" id="loadMorePoints" type="button" hidden>查看更多积分</button>
+            </section>
 
             <div class="profile-actions">
                 <button class="profile-action is-active" type="button" data-profile-panel="basicProfilePanel">个人资料</button>

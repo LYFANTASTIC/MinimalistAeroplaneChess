@@ -331,13 +331,13 @@ if (!ITEMS_ENABLED) {
 - Modify: `frontend/js/titleManager.js`
 - Create: `frontend/test/accountView.test.mjs`
 
-- [ ] Write view tests for summary formatting, empty history, pagination append, item-title filtering, and the label `本局账户积分`.
-- [ ] Add profile statistic cards for current points, lifetime points, games, wins, and planes defeated. Use `Intl.NumberFormat('zh-CN', { maximumFractionDigits: 2 })`.
-- [ ] Add recent-match and points-ledger sections with load-more buttons. Fetch summary/history only after `/api/auth/me` succeeds; handle either history request failing without hiding the profile.
-- [ ] Change the settlement energy chart label to `本局账户积分`. Its data source must be the new per-match account-points state, not the disabled capped `energyManager` balance.
-- [ ] Add an item-title predicate in `titleManager.js`; when `ITEMS_ENABLED` is false, item-spending/energy titles remain in source but are excluded from result arrays and carousel display.
-- [ ] Preserve responsive behavior and include visible empty/loading/error states.
-- [ ] Run view tests and `npm --workspace frontend run build`.
+- [x] Write view tests for summary formatting, empty history, pagination append, item-title filtering, and the label `本局账户积分`.
+- [x] Add profile statistic cards for current points, lifetime points, games, wins, and planes defeated. Use `Intl.NumberFormat('zh-CN', { maximumFractionDigits: 2 })`.
+- [x] Add recent-match and points-ledger sections with load-more buttons. Fetch summary/history only after `/api/auth/me` succeeds; handle either history request failing without hiding the profile.
+- [x] Change the settlement energy chart label to `本局账户积分`. Its data source must be the new per-match account-points state, not the disabled capped `energyManager` balance.
+- [x] Add an item-title predicate in `titleManager.js`; when `ITEMS_ENABLED` is false, item-spending/energy titles remain in source but are excluded from result arrays and carousel display.
+- [x] Preserve responsive behavior and include visible empty/loading/error states.
+- [x] Run view tests and `npm --workspace frontend run build`.
 - [ ] Commit: `feat: show persistent account progress`
 
 ## Task 10: Operational documentation and full verification

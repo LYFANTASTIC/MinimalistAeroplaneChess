@@ -1,3 +1,10 @@
+import {
+    formatAccountNumber,
+    mergeHistoryItems,
+    renderMatchHistory,
+    renderPointsHistory
+} from './accountView.js';
+
 const api = {
     async request(path, options = {}) {
         if (window.location.protocol === 'file:') {
@@ -32,7 +39,16 @@ const api = {
     register(payload) { return this.request('/api/auth/register', { method: 'POST', body: JSON.stringify(payload) }); },
     logout() { return this.request('/api/auth/logout', { method: 'POST', body: '{}' }); },
     updateProfile(payload) { return this.request('/api/auth/profile', { method: 'PUT', body: JSON.stringify(payload) }); },
-    changePassword(payload) { return this.request('/api/auth/password', { method: 'PUT', body: JSON.stringify(payload) }); }
+    changePassword(payload) { return this.request('/api/auth/password', { method: 'PUT', body: JSON.stringify(payload) }); },
+    accountSummary() { return this.request('/api/account/summary'); },
+    accountMatches(cursor = null) {
+        const query = cursor ? `?limit=10&cursor=${encodeURIComponent(cursor)}` : '?limit=10';
+        return this.request(`/api/account/matches${query}`);
+    },
+    accountPoints(cursor = null) {
+        const query = cursor ? `?limit=10&cursor=${encodeURIComponent(cursor)}` : '?limit=10';
+        return this.request(`/api/account/points${query}`);
+    }
 };
 
 function getSafeReturnTo() {
@@ -57,6 +73,7 @@ function continueAfterAuthentication(user) {
         return true;
     }
     renderProfile(user);
+    void loadAccountData(true);
     return false;
 }
 
@@ -71,8 +88,87 @@ const elements = {
     authKicker: document.getElementById('authKicker'),
     authMessage: document.getElementById('authMessage'),
     profileMessage: document.getElementById('profileMessage'),
-    passwordMessage: document.getElementById('passwordMessage')
+    passwordMessage: document.getElementById('passwordMessage'),
+    accountDataStatus: document.getElementById('accountDataStatus'),
+    matchHistory: document.getElementById('matchHistory'),
+    pointsHistory: document.getElementById('pointsHistory'),
+    loadMoreMatches: document.getElementById('loadMoreMatches'),
+    loadMorePoints: document.getElementById('loadMorePoints')
 };
+
+const accountHistory = {
+    matches: [],
+    points: [],
+    matchesCursor: null,
+    pointsCursor: null
+};
+
+function renderHistoryError(container, message) {
+    const state = document.createElement('p');
+    state.className = 'history-empty is-error';
+    state.textContent = message;
+    container.replaceChildren(state);
+}
+
+function renderSummary(summary) {
+    const stats = summary?.stats || {};
+    document.getElementById('statPointsBalance').textContent = formatAccountNumber(summary?.pointsBalance);
+    document.getElementById('statLifetimePoints').textContent = formatAccountNumber(stats.lifetimePointsEarned);
+    document.getElementById('statGamesPlayed').textContent = formatAccountNumber(stats.gamesPlayed);
+    document.getElementById('statGamesWon').textContent = formatAccountNumber(stats.gamesWon);
+    document.getElementById('statPlanesDefeated').textContent = formatAccountNumber(stats.planesDefeated);
+}
+
+async function loadMatchHistory(append = false) {
+    elements.loadMoreMatches.disabled = true;
+    try {
+        const page = await api.accountMatches(append ? accountHistory.matchesCursor : null);
+        accountHistory.matches = append ? mergeHistoryItems(accountHistory.matches, page.items) : page.items;
+        accountHistory.matchesCursor = page.nextCursor;
+        elements.matchHistory.innerHTML = renderMatchHistory(accountHistory.matches);
+        elements.loadMoreMatches.hidden = !page.nextCursor;
+    } catch (error) {
+        if (!append) renderHistoryError(elements.matchHistory, error.message);
+    } finally {
+        elements.loadMoreMatches.disabled = false;
+    }
+}
+
+async function loadPointsHistory(append = false) {
+    elements.loadMorePoints.disabled = true;
+    try {
+        const page = await api.accountPoints(append ? accountHistory.pointsCursor : null);
+        accountHistory.points = append ? mergeHistoryItems(accountHistory.points, page.items) : page.items;
+        accountHistory.pointsCursor = page.nextCursor;
+        elements.pointsHistory.innerHTML = renderPointsHistory(accountHistory.points);
+        elements.loadMorePoints.hidden = !page.nextCursor;
+    } catch (error) {
+        if (!append) renderHistoryError(elements.pointsHistory, error.message);
+    } finally {
+        elements.loadMorePoints.disabled = false;
+    }
+}
+
+async function loadAccountData(reset = false) {
+    if (reset) {
+        accountHistory.matches = [];
+        accountHistory.points = [];
+        accountHistory.matchesCursor = null;
+        accountHistory.pointsCursor = null;
+    }
+    elements.accountDataStatus.textContent = '正在同步…';
+    const [summaryResult] = await Promise.allSettled([
+        api.accountSummary(),
+        loadMatchHistory(false),
+        loadPointsHistory(false)
+    ]);
+    if (summaryResult.status === 'fulfilled') {
+        renderSummary(summaryResult.value.summary);
+        elements.accountDataStatus.textContent = '已同步';
+    } else {
+        elements.accountDataStatus.textContent = summaryResult.reason?.message || '账户数据暂时不可用';
+    }
+}
 
 function showMessage(element, message = '', type = 'error') {
     if (!element) return;
@@ -261,6 +357,9 @@ document.getElementById('logoutButton').addEventListener('click', async () => {
     try { await api.logout(); } catch (error) { /* 即使网络异常也返回登录界面。 */ }
     renderAuth();
 });
+
+elements.loadMoreMatches.addEventListener('click', () => loadMatchHistory(true));
+elements.loadMorePoints.addEventListener('click', () => loadPointsHistory(true));
 
 async function initialize() {
     try {
