@@ -3158,8 +3158,17 @@ function handleDiceRoll(ws, playerId, message) {
 
   // 更新游戏状态（仅游戏会话）
   if (gameSession && gameSession.gameData) {
+    if (!Number.isInteger(message.diceValue) || message.diceValue < 1 || message.diceValue > 6) {
+      ws.send(JSON.stringify({ type: 'error', message: '无效的骰子点数' }));
+      return;
+    }
     if (!canControlPlayerColor(gameSession, playerId, message.player)) {
       ws.send(JSON.stringify({ type: 'error', message: '当前账号不能操作这个玩家' }));
+      return;
+    }
+
+    if (gameSession.gameData.gamePhase !== 'rolling') {
+      console.warn(`[diceRoll] 忽略非掷骰阶段消息: phase=${gameSession.gameData.gamePhase}, playerId=${playerId}`);
       return;
     }
 
@@ -3172,6 +3181,9 @@ function handleDiceRoll(ws, playerId, message) {
     gameSession.gameData.diceValue = message.diceValue;
     gameSession.gameData.gamePhase = 'moving';
     gameSession.gameData.diceValueConsumed = false; // 新骰子值已就绪
+    if (Number.isInteger(message.diceValue) && message.diceValue >= 1 && message.diceValue <= 6) {
+      gameSession.gameData.diceStatistics[message.player][message.diceValue] += 1;
+    }
     
     // 首个操作后，标记游戏正式开始
     if (!gameSession.gameData.gameOfficiallyStarted) {
@@ -3351,14 +3363,20 @@ function handleFinalMoveResult(ws, playerId, message) {
     const beatenPiece = gameData.playerChess[beaten.player][beaten.chessIndex];
     beatenPiece.position = -1;
     beatenPiece.finished = false;
+    const counts = gameData.defeatCounts[player];
+    if (counts) counts[beaten.player] = Number(counts[beaten.player] || 0) + 1;
   }
-  const baseDistance = pendingMove.fromPosition < 0 ? 0 : pendingMove.diceValue;
+  const baseDistance = pendingMove.fromPosition < 0 ? 1 : pendingMove.diceValue;
   const specialDistance = Math.max(0, finalPosition - pendingMove.targetPosition);
-  const bounceDistance = pendingMove.fromPosition < 0
+  const endpointBounceDistance = pendingMove.fromPosition < 0
     ? 0
     : Math.max(0, pendingMove.fromPosition + pendingMove.diceValue - 56);
+  const stackBounceDistance = finalPosition >= 0 && finalPosition < pendingMove.targetPosition
+    ? pendingMove.targetPosition - finalPosition
+    : 0;
   gameData.movementDistance[player] = (gameData.movementDistance[player] || 0) + baseDistance + specialDistance;
-  gameData.bounceDistance[player] = (gameData.bounceDistance[player] || 0) + bounceDistance;
+  gameData.bounceDistance[player] = (gameData.bounceDistance[player] || 0)
+    + endpointBounceDistance + stackBounceDistance;
   delete gameData._pendingMove;
   console.log(`[finalMoveResult] 更新服务器棋子状态: 玩家${player}棋子${chessIndex} 位置=${finalPosition}`);
 
@@ -4124,14 +4142,24 @@ function handlePlayerTurnChange(ws, playerId, message) {
 
   // 更新游戏状态（仅游戏会话）
   if (target instanceof GameSession && target.gameData) {
+    const currentPlayer = target.gameData.currentPlayer;
+    if (!canControlPlayerColor(target, playerId, currentPlayer)) {
+      throw new Error('当前账号不能结束这个玩家的回合');
+    }
+    if (target.gameData._pendingMove) throw new Error('当前移动尚未提交最终结果');
     // 检查是否有连投奖励
     if (!forceEndTurn && target.gameData.canReroll && target.gameData.justRolledSix) {
       // 如果有连投奖励，保持当前玩家不变
       console.log(`玩家${target.gameData.currentPlayer}摇到6点，获得连投奖励，保持回合`);
+      newPlayer = currentPlayer;
       target.gameData.gamePhase = 'rolling';
       target.gameData.diceValue = 0;
       target.gameData.justRolledSix = false; // 重置justRolledSix状态
     } else {
+      const seats = Array.from(target.players.values()).map(player => player.color).sort((a, b) => a - b);
+      const expectedNextPlayer = seats[(seats.indexOf(currentPlayer) + 1) % seats.length];
+      newPlayer = Number(newPlayer);
+      if (newPlayer !== expectedNextPlayer) throw new Error('无效的下一位玩家');
       // 正常切换到下一个玩家（不跳过离线玩家，由AI托管处理）
       target.gameData.currentPlayer = newPlayer;
       target.gameData.gamePhase = 'rolling';
@@ -4173,6 +4201,12 @@ function handleNoMovableChess(ws, playerId, message) {
 
   // 只有GameSession才有完整的玩家列表（包括AI bot）
   if (gameSession && gameSession.gameData) {
+    if (!canControlPlayerColor(gameSession, playerId, Number(player))
+      || Number(player) !== gameSession.gameData.currentPlayer
+      || Number(diceValue) !== Number(gameSession.gameData.diceValue)
+      || gameSession.gameData._pendingMove) {
+      throw new Error('无法确认当前玩家没有可移动棋子');
+    }
     // 标记骰子值已消耗（当前玩家已用完本回合的骰子）
     gameSession.gameData.diceValueConsumed = true;
 
@@ -4435,14 +4469,8 @@ function handleGameResume(ws, playerId, message) {
 // 棋子回归起点（使用游戏会话中间件）
 const handleMoveChessToStart = withGameSessionValidation((ws, playerId, message, gameSession) => {
   const { player, chessIndex, reason, timestamp } = message;
-  // 更新棋子状态
-  if (gameSession.gameData.playerChess[player]?.[chessIndex]) {
-    gameSession.gameData.playerChess[player][chessIndex].position = -1;
-    gameSession.gameData.playerChess[player][chessIndex].finished = false;
-    console.log(`更新棋子状态: 玩家${player}棋子${chessIndex} 回归起点`);
-  }
 
-  // 广播结果
+  // 回基地动画不修改权威棋盘；最终移动结果会由服务端推导完整捕获集合。
   gameSession.broadcast({
     type: 'moveChessToStart',
     playerId,
@@ -4571,16 +4599,6 @@ function handleDefeatCountChange(ws, playerId, message) {
 
   console.log(`[击败计数同步] 玩家${attackerPlayer}击败玩家${defeatedPlayer}，计数: ${count}`);
 
-  // 如果是游戏会话，更新gameData中的击败计数
-  const gameSession = roomManager.getPlayerGameSession(playerId);
-  if (gameSession && gameSession.gameData && gameSession.gameData.defeatCounts) {
-    if (!gameSession.gameData.defeatCounts[attackerPlayer]) {
-      gameSession.gameData.defeatCounts[attackerPlayer] = {};
-    }
-    gameSession.gameData.defeatCounts[attackerPlayer][defeatedPlayer] = count;
-    console.log(`[击败计数状态] 已保存玩家${attackerPlayer}对玩家${defeatedPlayer}的击败计数: ${count}`);
-  }
-
   // 广播击败计数变化消息
   target.broadcast({
     type: 'defeatCountChange',
@@ -4615,13 +4633,7 @@ function handleDiceStatisticsSync(ws, playerId, message) {
     return;
   }
 
-  // 更新服务器端的骰子统计数据
-  if (!gameSession.gameData.diceStatistics[player]) {
-    gameSession.gameData.diceStatistics[player] = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 };
-  }
-  gameSession.gameData.diceStatistics[player][diceValue] = count;
-
-  console.log(`[骰子统计同步] 玩家${player}骰子${diceValue}点计数更新为${count}`);
+  // 客户端统计只用于兼容旧消息；持久化计数由 handleDiceRoll 在服务端累加。
 }
 
 /**

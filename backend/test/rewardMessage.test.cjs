@@ -175,6 +175,23 @@ test('normal rewards must match a collision position reachable by the pending mo
   );
 });
 
+test('normal rewards reject an enemy stack at the collision position', () => {
+  const session = createSession();
+  session.gameData.playerChess[2].push({ position: 7, finished: false });
+  const handler = createRewardMessageHandler({
+    pointsService: {},
+    sendToPlayer() {},
+    canControlPlayerColor: () => true
+  });
+
+  assert.throws(
+    () => handler.handle('controller', {
+      eventType: 'plane_defeated', player: 1, targetPlayer: 2, targetPieceIndex: 0
+    }, session),
+    /叠机不能作为普通击落奖励/
+  );
+});
+
 test('happy rewards advance along the server-derived collision chain', () => {
   const session = createSession({ happyMode: true });
   const previews = [];

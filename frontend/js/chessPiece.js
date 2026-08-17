@@ -1232,20 +1232,22 @@ class ChessPiece {
                     gameInfo.addStackCollision(player, targetStackInfo.player);
                 }
 
-                // 延迟执行撞机逻辑，让玩家看到飞棋动作
-                setTimeout(() => {
-                    // 当前飞棋的棋子返回起点
-                    this.gameState.updateChessPosition(player, chessIndex, -1);
-                    this.gameState.setChessFinished(player, chessIndex, false);
-                    this.animation.moveChessToStart(player, chessIndex);
+                // 等待玩家看清撞机，再同步完成整步；服务端会据此一次性更新权威棋盘。
+                await new Promise(resolve => setTimeout(resolve, 500));
+                this._currentMoveBeatenChesses.push({ player, chessIndex });
+                this.gameState.updateChessPosition(player, chessIndex, -1);
+                this.gameState.setChessFinished(player, chessIndex, false);
+                this.animation.moveChessToStart(player, chessIndex, null, true);
 
-                    // 终点的所有叠子棋子也返回各自起点
-                    for (const stackedChess of targetStackInfo.chessList) {
-                        this.gameState.updateChessPosition(stackedChess.player, stackedChess.chessIndex, -1);
-                        this.gameState.setChessFinished(stackedChess.player, stackedChess.chessIndex, false);
-                        this.animation.moveChessToStart(stackedChess.player, stackedChess.chessIndex);
-                    }
-                }, 500);
+                for (const stackedChess of targetStackInfo.chessList) {
+                    this._currentMoveBeatenChesses.push({
+                        player: stackedChess.player,
+                        chessIndex: stackedChess.chessIndex
+                    });
+                    this.gameState.updateChessPosition(stackedChess.player, stackedChess.chessIndex, -1);
+                    this.gameState.setChessFinished(stackedChess.player, stackedChess.chessIndex, false);
+                    this.animation.moveChessToStart(stackedChess.player, stackedChess.chessIndex, null, true);
+                }
                 return; // 飞棋结束
             }
         }

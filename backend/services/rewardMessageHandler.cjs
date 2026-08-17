@@ -104,6 +104,18 @@ function buildPlaneDefeatInput(gameSession, actorPlayer, message, sequenceNo, ba
   if (!getNormalCollisionPositions(actorPlayer.color, baseLanding).has(targetAbsolutePosition)) {
     throw new RangeError('被撞棋子不在本次移动路径');
   }
+  let enemyPiecesAtTarget = 0;
+  for (const player of gameSession.players.values()) {
+    if (player.color === actorPlayer.color) continue;
+    const pieces = gameSession.gameData?.playerChess?.[player.color] || [];
+    for (const piece of pieces) {
+      if (piece && !piece.finished && piece.position >= 0 && piece.position < 51
+        && getAbsolutePosition(player.color, piece.position) === targetAbsolutePosition) {
+        enemyPiecesAtTarget += 1;
+      }
+    }
+  }
+  if (enemyPiecesAtTarget !== 1) throw new RangeError('叠机不能作为普通击落奖励');
 
   return {
     matchId: gameSession.matchId,

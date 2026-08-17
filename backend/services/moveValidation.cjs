@@ -3,7 +3,6 @@
 const {
   getAbsolutePosition,
   getBaseLandingPosition,
-  getNormalCollisionPositions,
   resolveHappyLanding
 } = require('./rewardMessageHandler.cjs');
 
@@ -89,33 +88,55 @@ function addStackBounceOutcomes(session, pendingMove, positions) {
   }
 }
 
-function validateBeatenChesses(session, actorSeat, baseLanding, beatenChesses) {
-  if (beatenChesses == null) return [];
-  if (!Array.isArray(beatenChesses)) throw new RangeError('无效的被撞棋子列表');
-  if (session.happyMode && beatenChesses.length > 0) throw new RangeError('欢乐模式不会击落棋子');
-  const collisionPositions = getNormalCollisionPositions(actorSeat, baseLanding);
-  const seen = new Set();
-  return beatenChesses.map(entry => {
-    const seat = Number(entry?.player);
-    const chessIndex = Number(entry?.chessIndex);
-    const key = `${seat}:${chessIndex}`;
-    if (seat === actorSeat || !findPlayerBySeat(session, seat)
-      || !Number.isInteger(chessIndex) || chessIndex < 0 || chessIndex >= session.pieceCount
-      || seen.has(key)) {
-      throw new RangeError('无效的被撞棋子');
-    }
-    const piece = session.gameData?.playerChess?.[seat]?.[chessIndex];
-    if (piece && !piece.finished && piece.position === -1) {
-      seen.add(key);
-      return { player: seat, chessIndex };
-    }
-    if (!piece || piece.finished || piece.position < 0
-      || !collisionPositions.has(getAbsolutePosition(seat, piece.position))) {
-      throw new RangeError('被撞棋子不在本次移动路径');
-    }
-    seen.add(key);
-    return { player: seat, chessIndex };
-  });
+function relativeCollisionPositions(baseLanding, finalPosition) {
+  const positions = [baseLanding];
+  if (baseLanding === 14) {
+    positions.push(18);
+    if (finalPosition === 30) positions.push(30);
+  } else if (baseLanding === 18) {
+    if (finalPosition === 22) positions.push(22);
+    if (finalPosition === 34) positions.push(30, 34);
+  } else if (resolveHappyLanding(baseLanding) === finalPosition && finalPosition !== baseLanding) {
+    positions.push(finalPosition);
+  }
+  return positions;
+}
+
+function piecesByAbsolutePosition(session, actorSeat, relativePositions) {
+  const groups = new Map();
+  const allowed = new Set(relativePositions.map(position => getAbsolutePosition(actorSeat, position)));
+  for (const player of session.players.values()) {
+    if (player.color === actorSeat) continue;
+    const pieces = session.gameData?.playerChess?.[player.color] || [];
+    pieces.forEach((piece, chessIndex) => {
+      if (!piece || piece.finished || piece.position < 0 || piece.position >= 51) return;
+      const absolute = getAbsolutePosition(player.color, piece.position);
+      if (!allowed.has(absolute)) return;
+      const group = groups.get(absolute) || [];
+      group.push({ player: player.color, chessIndex });
+      groups.set(absolute, group);
+    });
+  }
+  return groups;
+}
+
+function deriveCapturedPieces(session, actorSeat, baseLanding, finalPosition) {
+  if (session.happyMode) return [];
+  const groups = piecesByAbsolutePosition(
+    session,
+    actorSeat,
+    relativeCollisionPositions(baseLanding, finalPosition)
+  );
+  return Array.from(groups.values()).flatMap(group => group.length === 1 ? group : []);
+}
+
+function deriveCrashStack(session, actorSeat, baseLanding) {
+  const candidates = [baseLanding];
+  if (baseLanding === 14) candidates.push(18, 30);
+  else if (baseLanding === 18) candidates.push(22, 30, 34);
+  else candidates.push(resolveHappyLanding(baseLanding));
+  const groups = piecesByAbsolutePosition(session, actorSeat, candidates);
+  return Array.from(groups.values()).find(group => group.length >= 2) || [];
 }
 
 function validateFinalMoveResult({ session, playerId, message, canControlPlayerColor }) {
@@ -141,7 +162,7 @@ function validateFinalMoveResult({ session, playerId, message, canControlPlayerC
     if (session.happyMode) throw new RangeError('欢乐模式不会发生叠子撞毁');
     const actorListed = Array.isArray(message?.beatenChesses)
       && message.beatenChesses.some(entry => Number(entry?.player) === seat && Number(entry?.chessIndex) === chessIndex);
-    const stackPieces = stackPiecesAtPosition(session, seat, baseLanding);
+    const stackPieces = deriveCrashStack(session, seat, baseLanding);
     if (!actorListed || stackPieces.length < 2) throw new RangeError('本次移动不会发生叠子撞毁');
     return {
       player: seat,
@@ -155,12 +176,7 @@ function validateFinalMoveResult({ session, playerId, message, canControlPlayerC
     player: seat,
     chessIndex,
     finalPosition,
-    beatenChesses: validateBeatenChesses(
-      session,
-      seat,
-      baseLanding,
-      message?.beatenChesses
-    ),
+    beatenChesses: deriveCapturedPieces(session, seat, baseLanding, finalPosition),
     pendingMove
   };
 }

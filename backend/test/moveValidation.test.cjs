@@ -129,7 +129,7 @@ test('a piece may finish only when the pending move reaches 56', () => {
   }).finalPosition, 56);
 });
 
-test('final result accepts a captured piece whose home animation arrived first', () => {
+test('final result derives captures even when the client submits an empty list', () => {
   const session = createSession();
   session.gameData._pendingMove = validateFullMoveStart({
     session,
@@ -137,8 +137,6 @@ test('final result accepts a captured piece whose home animation arrived first',
     message: { player: 1, chessIndex: 0, fromPosition: 16, diceValue: 4 },
     canControlPlayerColor
   });
-  session.gameData.playerChess[2][0].position = -1;
-
   const result = validateFinalMoveResult({
     session,
     playerId: 'player-1',
@@ -146,7 +144,7 @@ test('final result accepts a captured piece whose home animation arrived first',
       player: 1,
       chessIndex: 0,
       finalPosition: 20,
-      beatenChesses: [{ player: 2, chessIndex: 0 }]
+      beatenChesses: []
     },
     canControlPlayerColor
   });
