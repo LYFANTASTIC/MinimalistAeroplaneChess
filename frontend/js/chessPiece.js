@@ -972,22 +972,32 @@ class ChessPiece {
             // 碰撞停顿
             await new Promise(resolve => setTimeout(resolve, 300));
 
-            // 道具模式：积分奖励（每颗敌方棋子20分）
-            if (window.energyManager && window.energyManager.isSkillModeEnabled()) {
-                // 找到碰撞位置敌方的一个棋子索引（用于粒子特效起点）
-                const enemyChesses = this.gameState.playerChess[collidedPlayer];
-                let targetIdx = 0;
-                const absPos = this.utils.getAbsolutePosition(player, pos);
-                for (let ci = 0; ci < enemyChesses.length; ci++) {
-                    const ec = enemyChesses[ci];
-                    if (ec && !ec.finished) {
-                        const ecAbsPos = this.utils.getAbsolutePosition(collidedPlayer, ec.position);
-                        if (ecAbsPos === absPos) {
-                            targetIdx = ci;
-                            break;
-                        }
+            // 找到碰撞位置敌方的一个棋子索引，账户积分由服务端按实际叠子数计算。
+            const enemyChesses = this.gameState.playerChess[collidedPlayer];
+            let targetIdx = 0;
+            const absPos = this.utils.getAbsolutePosition(player, pos);
+            for (let ci = 0; ci < enemyChesses.length; ci++) {
+                const ec = enemyChesses[ci];
+                if (ec && !ec.finished) {
+                    const ecAbsPos = this.utils.getAbsolutePosition(collidedPlayer, ec.position);
+                    if (ecAbsPos === absPos) {
+                        targetIdx = ci;
+                        break;
                     }
                 }
+            }
+            if (!this._isNetworkReplayMode && this.gameState.isOnlineMultiplayer && window.gameInstance?.multiplayerGameManager) {
+                window.gameInstance.multiplayerGameManager.syncAccountRewardEvent({
+                    eventType: 'happy_collision',
+                    player,
+                    targetPlayer: collidedPlayer,
+                    targetPieceIndex: targetIdx,
+                    collisionPosition: pos
+                });
+            }
+
+            // 道具模式实现保留；当前产品开关关闭时不会进入此分支。
+            if (window.energyManager && window.energyManager.isSkillModeEnabled()) {
                 window.energyManager.addBonusEnergy(player, 20 * enemyCount, collidedPlayer, targetIdx);
             }
 

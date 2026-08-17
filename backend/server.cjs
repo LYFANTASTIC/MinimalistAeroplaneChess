@@ -10,6 +10,8 @@ const { UserConflictError, createUserRepository } = require('./repositories/user
 const { createMatchRepository } = require('./repositories/matchRepository.cjs');
 const { createAccountHandlers } = require('./routes/accountRoutes.cjs');
 const { buildMatchRecord, buildSettlementRecord } = require('./services/matchLifecycle.cjs');
+const { createPointsService } = require('./services/pointsService.cjs');
+const { createRewardMessageHandler } = require('./services/rewardMessageHandler.cjs');
 
 const app = express();
 const server = http.createServer(app);
@@ -70,6 +72,7 @@ const chatAttempts = new Map();
 const userRepository = createUserRepository();
 const matchRepository = createMatchRepository();
 const accountHandlers = createAccountHandlers({ userRepository, matchRepository });
+const pointsService = createPointsService();
 
 function normalizeEmail(value) {
   return String(value || '').trim().toLowerCase();
@@ -580,6 +583,7 @@ class GameSession {
     this.persistenceState = 'active';
     this.matchPersistenceReady = null;
     this.settlementPromise = null;
+    this.rewardFactsSeen = new Map();
     this.pieceCount = pieceCount;
     this.roomCode = roomCode;
     this.hostId = hostId;
@@ -715,7 +719,11 @@ function beginMatchSettlement(gameSession, message, endReason) {
   gameSession.persistenceState = 'settling';
   const settlement = buildSettlementRecord(gameSession, message, endReason);
   gameSession.settlementPromise = Promise.resolve(gameSession.matchPersistenceReady)
-    .then(ready => ready && matchRepository.settleMatch(settlement))
+    .then(async ready => {
+      if (!ready) return false;
+      await pointsService.flushPendingForMatch(gameSession.matchId);
+      return matchRepository.settleMatch(settlement);
+    })
     .then(saved => {
       gameSession.persistenceState = saved ? 'finished' : 'settlement_skipped';
       return saved;
@@ -1091,6 +1099,16 @@ class Player {
 
 // -------------------------- 全局实例与中间件 --------------------------
 const roomManager = new RoomManager();
+const rewardMessageHandler = createRewardMessageHandler({
+  pointsService,
+  canControlPlayerColor,
+  sendToPlayer(playerId, payload) {
+    const playerWs = roomManager.getPlayerConnection(playerId);
+    if (playerWs && playerWs.readyState === WebSocket.OPEN) {
+      playerWs.send(JSON.stringify(payload));
+    }
+  }
+});
 
 /**
  * 房间验证中间件（统一权限校验）
@@ -1923,6 +1941,9 @@ function handleMessage(ws, playerId, message) {
         break;
       case 'defeatCountChange':
         handleDefeatCountChange(ws, playerId, message);
+        break;
+      case 'accountRewardEvent':
+        handleAccountRewardEvent(ws, playerId, message);
         break;
       case 'gameEnd':
         handleGameEnd(ws, playerId, message);
@@ -4551,6 +4572,12 @@ function handleDefeatCountChange(ws, playerId, message) {
     count,
     timestamp: message.timestamp || Date.now()
   });
+}
+
+function handleAccountRewardEvent(ws, playerId, message) {
+  const gameSession = roomManager.getPlayerGameSession(playerId);
+  if (!gameSession) throw new Error('玩家不在游戏会话中');
+  rewardMessageHandler.handle(playerId, message, gameSession);
 }
 
 /**

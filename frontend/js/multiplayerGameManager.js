@@ -6,6 +6,7 @@ import { reconnectManager } from './reconnectManager.js';
 import { activePlayerManager } from './activePlayerManager.js';
 import { playerIdManager } from './playerIdManager.js';
 import { handleAuthenticationExpired } from './authGuard.js';
+import { accountPoints } from './accountPoints.js';
 
 // 声明全局变量，这些变量在游戏运行时会被设置
 let gameState, uiUpdater, gameInfo;
@@ -930,6 +931,15 @@ class MultiplayerGameManager {
                 break;
             case 'defeatCountChange':
                 this.handleDefeatCountChange(data);
+                break;
+            case 'accountPointsPending':
+                accountPoints.handlePending(data);
+                break;
+            case 'accountPointsUpdated':
+                accountPoints.handleUpdated(data);
+                break;
+            case 'accountPointsSyncFailed':
+                accountPoints.handleFailed(data);
                 break;
             case 'stackCollision':
                 this.handleStackCollision(data);
@@ -2736,6 +2746,11 @@ class MultiplayerGameManager {
                 timestamp: Date.now()
             });
         }
+    }
+
+    syncAccountRewardEvent(facts) {
+        if (!this.isConnected || !this.isOnlineMode || this.isSpectator) return;
+        this.sendMessage('accountRewardEvent', facts);
     }
 
     /**

@@ -20,6 +20,7 @@ import { energyManager } from './energyManager.js';
 import { energyDisplay } from './energyDisplay.js';
 import { skillManager } from './skillManager.js';
 import { lightningManager } from './lightningManager.js';
+import { accountPoints } from './accountPoints.js';
 
 class FlyingChessGame {
     constructor() {
@@ -76,6 +77,7 @@ class FlyingChessGame {
         window.energyManager = this.energyManager;
         window.energyDisplay = this.energyDisplay;
         window.skillManager = this.skillManager;
+        window.accountPoints = accountPoints;
 
         // 设置全局游戏实例引用（供其他模块使用）
         window.gameInstance = this;

@@ -261,8 +261,8 @@ const idempotencyKey = `match:${matchId}:event:${sequenceNo}:user:${userId}`;
 - Modify: `frontend/js/multiplayerGameManager.js:2670-2805`
 - Modify: `frontend/js/gameMain.js`
 
-- [ ] Write message-handler tests proving the board/collision broadcast occurs before a delayed points promise completes, AI rewards are skipped, only the actor can claim its seat, and duplicate sequence numbers do not double-pay.
-- [ ] Add a single client message, `accountRewardEvent`, containing only facts:
+- [x] Write message-handler tests proving the board/collision broadcast occurs before a delayed points promise completes, AI rewards are skipped, only the actor can claim its seat, and duplicate sequence numbers do not double-pay.
+- [x] Add a single client message, `accountRewardEvent`, containing only facts:
 
 ```js
 {
@@ -275,13 +275,13 @@ const idempotencyKey = `match:${matchId}:event:${sequenceNo}:user:${userId}`;
 ```
 
 For欢乐模式 send `eventType: 'happy_collision'`, target seat/pieces, and enemy piece count. Never send a final reward or account balance.
-- [ ] In the server handler, bind the sender to its authenticated match player, allocate the next server-side sequence number, validate target seats and mode, calculate a preview reward, and immediately send `accountPointsPending` to the actor.
-- [ ] Start `pointsService.award(...)` without awaiting it. On success send `accountPointsUpdated` with `amount`, `balance`, `matchId`, `sequenceNo`, and `idempotencyKey`; on retryable failure leave the event visibly pending.
-- [ ] Add a small frontend state module that deduplicates by idempotency key, shows `账户积分 +X（同步中）`, and changes to confirmed balance on `accountPointsUpdated`.
-- [ ] Keep existing defeat counts and happy-mode movement rewards unchanged.
-- [ ] Flush pending rewards before final match persistence; settlement itself must still render immediately.
+- [x] In the server handler, bind the sender to its authenticated match player, allocate the next server-side sequence number, validate target seats and mode, calculate a preview reward, and immediately send `accountPointsPending` to the actor.
+- [x] Start `pointsService.award(...)` without awaiting it. On success send `accountPointsUpdated` with `amount`, `balance`, `matchId`, `sequenceNo`, and `idempotencyKey`; on retryable failure leave the event visibly pending.
+- [x] Add a small frontend state module that deduplicates by idempotency key, shows `账户积分 +X（同步中）`, and changes to confirmed balance on `accountPointsUpdated`.
+- [x] Keep existing defeat counts and happy-mode movement rewards unchanged.
+- [x] Flush pending rewards before final match persistence; settlement itself must still render immediately.
 - [ ] Run backend tests, frontend build, and a manual two-tab collision check with artificial database delay.
-- [ ] Commit: `feat: award permanent points for collisions`
+- [x] Commit: `feat: award permanent points for collisions`
 
 ## Task 8: Disable item mode while retaining implementation code
 

@@ -7479,3 +7479,36 @@ use[href="#checkmark"] {
     text-decoration: none;
     cursor: pointer;
 }
+/* 永久账户积分提示；数据库写入期间不阻塞棋盘动画。 */
+.account-points-toast {
+    position: fixed;
+    left: 50%;
+    bottom: max(5rem, calc(env(safe-area-inset-bottom) + 4rem));
+    z-index: 10020;
+    max-width: min(90vw, 24rem);
+    padding: .72rem 1.05rem;
+    border: 1px solid rgba(255, 255, 255, .34);
+    border-radius: 999px;
+    color: #fff;
+    background: rgba(24, 32, 48, .9);
+    box-shadow: 0 12px 36px rgba(0, 0, 0, .24);
+    font-weight: 700;
+    letter-spacing: .02em;
+    opacity: 0;
+    transform: translate(-50%, .75rem);
+    transition: opacity .2s ease, transform .2s ease;
+    pointer-events: none;
+}
+
+.account-points-toast.is-visible {
+    opacity: 1;
+    transform: translate(-50%, 0);
+}
+
+.account-points-toast.is-confirmed {
+    background: rgba(25, 112, 74, .94);
+}
+
+.account-points-toast.is-failed {
+    background: rgba(145, 66, 52, .94);
+}

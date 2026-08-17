@@ -194,6 +194,16 @@ export async function beatChessAtPosition(absolutePosition, currentPlayer, gameS
                 const targetChessObj = gameState.getPlayerChess()[targetChess.player][targetChess.chessIndex];
                 const progressBeforeBeat = calculateChessProgress(targetChessObj, targetChess.player);
 
+                // 永久账户积分由服务端依据棋盘事实计算；客户端不发送奖励值。
+                if (gameState.isOnlineMultiplayer && window.gameInstance?.multiplayerGameManager) {
+                    window.gameInstance.multiplayerGameManager.syncAccountRewardEvent({
+                        eventType: 'plane_defeated',
+                        player: currentPlayer,
+                        targetPlayer: targetChess.player,
+                        targetPieceIndex: targetChess.chessIndex
+                    });
+                }
+
                 // 导入积分管理器
                 const { energyManager } = await import('./energyManager.js');
                 if (energyManager.isSkillModeEnabled()) {

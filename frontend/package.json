@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "test": "node --test test",
     "preview": "vite preview",
     "server": "node server.cjs",
     "start": "concurrently \"npm run server\" \"npm run dev\""
