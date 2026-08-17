@@ -258,6 +258,7 @@ module.exports = {
   calculatePieceProgress,
   createRewardMessageHandler,
   getAbsolutePosition,
+  getBaseLandingPosition,
   getNormalCollisionPositions,
   resolveHappyLanding
 };

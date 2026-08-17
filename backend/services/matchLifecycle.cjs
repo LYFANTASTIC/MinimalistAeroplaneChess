@@ -22,6 +22,12 @@ function normalizeTitles(value) {
   return [];
 }
 
+function leaderSeat(players, valueForSeat) {
+  return players
+    .map(player => ({ seat: player.color, value: nonNegativeInteger(valueForSeat(player.color)) }))
+    .sort((left, right) => right.value - left.value || left.seat - right.seat)[0];
+}
+
 function buildMatchRecord(session) {
   return {
     id: session.matchId,
@@ -78,6 +84,12 @@ function buildSettlementRecord(session, message, endReason) {
   const winnerTeamNo = getTeamNo(session, winnerSeat);
   const defeatCounts = session.gameData?.defeatCounts || {};
   const diceStatistics = session.gameData?.diceStatistics || {};
+  const movementDistance = session.gameData?.movementDistance || {};
+  const bounceDistance = session.gameData?.bounceDistance || {};
+  const players = Array.from(session.players.values());
+  const marathon = leaderSeat(players, seat => movementDistance[seat]);
+  const sixMaster = leaderSeat(players, seat => diceStatistics[seat]?.[6]);
+  const killer = leaderSeat(players, seat => sumCounts(defeatCounts[seat]));
 
   return {
     matchId: session.matchId,
@@ -87,19 +99,27 @@ function buildSettlementRecord(session, message, endReason) {
     winnerUserId: winnerPlayer?.isAI ? null : (winnerPlayer?.accountUserId || null),
     winnerTeamNo,
     sequenceNo: session.nextEventSequence(),
-    players: Array.from(session.players.values()).map(player => {
+    players: players.map(player => {
       const teamNo = getTeamNo(session, player.color);
+      const placement = Math.max(1, order.indexOf(player.color) + 1);
+      const titles = [];
+      if (placement === 1) titles.push('棋王');
+      if (marathon?.seat === player.color && marathon.value > 0) titles.push('长跑冠军');
+      if (sixMaster?.seat === player.color && sixMaster.value > 0) titles.push('六点狂魔');
+      if (killer?.seat === player.color && killer.value > 0) titles.push('收割者');
+      if (nonNegativeInteger(bounceDistance[player.color]) > 50) titles.push('逆风行者');
+      if (titles.length === 0) titles.push('平凡棋手');
       return {
         userId: player.isAI ? null : (player.accountUserId || null),
         seat: player.color,
-        placement: Math.max(1, order.indexOf(player.color) + 1),
+        placement,
         isWinner: session.teamMode ? teamNo === winnerTeamNo : player.color === winnerSeat,
         planesDefeated: sumCounts(defeatCounts[player.color]),
         happyCollisions: 0,
-        movementDistance: 0,
-        bounceDistance: 0,
+        movementDistance: nonNegativeInteger(movementDistance[player.color]),
+        bounceDistance: nonNegativeInteger(bounceDistance[player.color]),
         diceStatistics: diceStatistics[player.color] || {},
-        titles: []
+        titles
       };
     })
   };

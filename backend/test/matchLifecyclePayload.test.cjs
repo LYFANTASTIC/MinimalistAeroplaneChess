@@ -29,6 +29,8 @@ function createSession() {
       },
       defeatCounts: { 1: { 2: 3 }, 2: { 1: 0 } },
       diceStatistics: { 1: { 6: 2 }, 2: { 6: 1 } },
+      movementDistance: { 1: 25, 2: 10 },
+      bounceDistance: { 1: 2, 2: 0 },
       progressHistory: [{ round: 1, players: { 1: 100, 2: 35 } }]
     },
     nextEventSequence() { return 4; }
@@ -58,7 +60,8 @@ test('normal settlement puts the winner first and only derives server statistics
   assert.equal(record.winnerUserId, USER_ONE);
   assert.equal(record.players[0].placement, 1);
   assert.equal(record.players[0].planesDefeated, 3);
-  assert.equal(record.players[0].movementDistance, 0);
+  assert.equal(record.players[0].movementDistance, 25);
+  assert.equal(record.players[0].bounceDistance, 2);
   assert.deepEqual(record.players[0].diceStatistics, { 6: 2 });
   assert.equal(record.durationMs, 1200000);
   assert.equal(record.sequenceNo, 4);
@@ -76,5 +79,6 @@ test('forced settlement derives seat order from server chess state', () => {
 
   assert.equal(record.players.find(player => player.seat === 1).placement, 1);
   assert.equal(record.players.find(player => player.seat === 2).placement, 2);
-  assert.deepEqual(record.players.find(player => player.seat === 2).titles, []);
+  assert.deepEqual(record.players.find(player => player.seat === 2).titles, ['平凡棋手']);
+  assert.ok(record.players.find(player => player.seat === 1).titles.includes('棋王'));
 });

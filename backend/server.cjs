@@ -12,6 +12,10 @@ const { healthCheck } = require('./db/pool.cjs');
 const { createAccountHandlers } = require('./routes/accountRoutes.cjs');
 const { createHealthHandler } = require('./routes/healthRoutes.cjs');
 const { buildMatchRecord, buildSettlementRecord } = require('./services/matchLifecycle.cjs');
+const {
+  validateFinalMoveResult,
+  validateFullMoveStart
+} = require('./services/moveValidation.cjs');
 const { createPointsService } = require('./services/pointsService.cjs');
 const { retryTransientOperation } = require('./services/persistenceRetry.cjs');
 const { createRewardMessageHandler } = require('./services/rewardMessageHandler.cjs');
@@ -33,6 +37,7 @@ const ITEM_MESSAGE_TYPES = new Set([
   'energyGainAnimation',
   'energyChange'
 ]);
+const PERSISTENCE_RETRY_DELAYS = [250, 1000, 4000, 15000, 30000];
 
 // 中间件
 app.set('trust proxy', 1);
@@ -638,6 +643,8 @@ class GameSession {
       diceValueConsumed: false,
       // 数据分析相关（用于重连恢复）
       diceStatistics: {}, // 骰子投掷统计
+      movementDistance: {},
+      bounceDistance: {},
       progressHistory: [], // 完成度历史记录
       currentRound: 0, // 当前回合数
       // 思考时间相关（用于重连恢复进度条）
@@ -659,6 +666,8 @@ class GameSession {
       this.gameData.energyStates[player.color] = 0;
       // 初始化骰子投掷统计
       this.gameData.diceStatistics[player.color] = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 };
+      this.gameData.movementDistance[player.color] = 0;
+      this.gameData.bounceDistance[player.color] = 0;
     });
   }
 
@@ -730,7 +739,10 @@ function beginMatchPersistence(gameSession) {
     if (created) return Promise.resolve(true);
     if (inFlight) return inFlight;
     gameSession.matchCreationState = 'creating';
-    inFlight = retryTransientOperation(() => matchRepository.createMatch(record))
+    inFlight = retryTransientOperation(() => matchRepository.createMatch(record), {
+      retryDelays: PERSISTENCE_RETRY_DELAYS,
+      maxRetries: Infinity
+    })
       .then(() => {
         created = true;
         gameSession.matchCreationState = 'created';
@@ -760,8 +772,11 @@ function beginMatchSettlement(gameSession, message, endReason) {
   gameSession.settlementPromise = Promise.resolve(matchReady)
     .then(async ready => {
       if (!ready) throw new Error('对局记录尚未保存，无法结算');
-      await pointsService.flushPendingForMatch(gameSession.matchId);
-      return retryTransientOperation(() => matchRepository.settleMatch(settlement));
+      await pointsService.flushPendingForMatch(gameSession.matchId, { retryUntilAvailable: true });
+      return retryTransientOperation(() => matchRepository.settleMatch(settlement), {
+        retryDelays: PERSISTENCE_RETRY_DELAYS,
+        maxRetries: Infinity
+      });
     })
     .then(saved => {
       gameSession.persistenceState = saved ? 'finished' : 'settlement_skipped';
@@ -781,9 +796,14 @@ function queueAbandonedMatch(gameSession, endReason) {
     ? gameSession.ensureMatchPersistence()
     : gameSession.matchPersistenceReady;
   Promise.resolve(matchReady)
-    .then(ready => ready && retryTransientOperation(
-      () => matchRepository.abandonMatch(gameSession.matchId, endReason)
-    ))
+    .then(async ready => {
+      if (!ready) return false;
+      await pointsService.flushPendingForMatch(gameSession.matchId, { retryUntilAvailable: true });
+      return retryTransientOperation(
+        () => matchRepository.abandonMatch(gameSession.matchId, endReason),
+        { retryDelays: PERSISTENCE_RETRY_DELAYS, maxRetries: Infinity }
+      );
+    })
     .then(saved => {
       gameSession.persistenceState = saved ? 'abandoned' : 'abandon_skipped';
     })
@@ -3288,97 +3308,67 @@ function handleDiceDisplay(ws, playerId, message) {
 
 // 处理整回合移动开始消息（意图同步）
 function handleFullMoveStart(ws, playerId, message) {
-  const target = getBroadcastTarget(playerId);
-  if (!target) throw new Error('玩家不在任何房间或游戏会话中');
-
-  // 立即标记骰子值已被消耗，防止玩家在移动动画过程中刷新页面后利用 diceValueConsumed=false
-  // 重复选择棋子进行多次移动（见 restoreGameState 特殊处理2）
-  if (target.gameData && message.player !== undefined && message.chessIndex !== undefined) {
-    target.gameData.diceValueConsumed = true;
-
-    // 不要更新 chessData.position，避免重连后棋子恢复到错误位置
-    // boardSync 联动另一位在线玩家的真实状态进行纠正
-    const chessData = target.gameData.playerChess?.[message.player]?.[message.chessIndex];
-    let computedTarget = message.targetPosition;
-    if (chessData) {
-      if (computedTarget === undefined && typeof message.fromPosition === 'number' && typeof message.diceValue === 'number') {
-        computedTarget = message.fromPosition >= 0
-          ? Math.min(message.fromPosition + message.diceValue, 56)
-          : 0;
-      }
-      // 不再更新 chessData.position——等待 syncFinalMoveResult 或 boardSync 纠正
-      console.log(`[fullMoveStart] 记录移动: 玩家${message.player}棋子${message.chessIndex} 位置${chessData.position} 骰子${message.diceValue}`);
-    }
-
-    // _pendingMove 记录移动意图，防止重选和切换回合
-    target.gameData._pendingMove = {
-      player: message.player,
-      chessIndex: message.chessIndex,
-      fromPosition: message.fromPosition,
-      diceValue: message.diceValue,
-      targetPosition: computedTarget,
-      timestamp: Date.now()
-    };
-  }
+  const target = roomManager.getPlayerGameSession(playerId);
+  if (!(target instanceof GameSession)) throw new Error('玩家不在游戏会话中');
+  const pendingMove = validateFullMoveStart({
+    session: target,
+    playerId,
+    message,
+    canControlPlayerColor
+  });
+  target.gameData.diceValueConsumed = true;
+  target.gameData._pendingMove = pendingMove;
+  console.log(`[fullMoveStart] 记录移动: 玩家${pendingMove.player}棋子${pendingMove.chessIndex} 位置${pendingMove.fromPosition} 骰子${pendingMove.diceValue}`);
 
   target.broadcast({
     type: 'fullMoveStart',
     playerId,
-    player: message.player,
-    chessIndex: message.chessIndex,
-    diceValue: message.diceValue,
-    fromPosition: message.fromPosition,
-    targetPosition: message.targetPosition,
+    player: pendingMove.player,
+    chessIndex: pendingMove.chessIndex,
+    diceValue: pendingMove.diceValue,
+    fromPosition: pendingMove.fromPosition,
+    targetPosition: pendingMove.targetPosition,
     timestamp: message.timestamp
   });
 }
 
 // 处理整回合移动最终结果消息（兜底校验）
 function handleFinalMoveResult(ws, playerId, message) {
-  const target = getBroadcastTarget(playerId);
-  if (!target) throw new Error('玩家不在任何房间或游戏会话中');
-
-  // 如果是游戏会话，更新服务器端的棋子状态
-  if (target.gameData && target.gameData.playerChess) {
-    // 标记骰子值已被消耗（重连后不可再用同一骰子值选棋）
-    target.gameData.diceValueConsumed = true;
-    // 清除待处理移动标记（finalMoveResult 到达说明移动已完成）
-    delete target.gameData._pendingMove;
-
-    const player = message.player;
-    const chessIndex = message.chessIndex;
-    const finalPosition = message.finalPosition;
-    
-    // 更新移动的棋子位置
-    if (target.gameData.playerChess[player]?.[chessIndex]) {
-      target.gameData.playerChess[player][chessIndex].position = finalPosition;
-      if (finalPosition === 56) {
-        target.gameData.playerChess[player][chessIndex].finished = true;
-      } else if (finalPosition === -1) {
-        target.gameData.playerChess[player][chessIndex].finished = false;
-      }
-      console.log(`[finalMoveResult] 更新服务器棋子状态: 玩家${player}棋子${chessIndex} 位置=${finalPosition}`);
-    }
-
-    // 更新被 beat 的棋子位置
-    if (message.beatenChesses && Array.isArray(message.beatenChesses)) {
-      for (const bc of message.beatenChesses) {
-        if (target.gameData.playerChess[bc.player]?.[bc.chessIndex]) {
-          target.gameData.playerChess[bc.player][bc.chessIndex].position = -1;
-          target.gameData.playerChess[bc.player][bc.chessIndex].finished = false;
-          console.log(`[finalMoveResult] 更新服务器被beat棋子: 玩家${bc.player}棋子${bc.chessIndex} 回家`);
-        }
-      }
-    }
+  const target = roomManager.getPlayerGameSession(playerId);
+  if (!(target instanceof GameSession)) throw new Error('玩家不在游戏会话中');
+  const result = validateFinalMoveResult({
+    session: target,
+    playerId,
+    message,
+    canControlPlayerColor
+  });
+  const { player, chessIndex, finalPosition, beatenChesses, pendingMove } = result;
+  const gameData = target.gameData;
+  const piece = gameData.playerChess[player][chessIndex];
+  piece.position = finalPosition;
+  piece.finished = finalPosition === 56;
+  for (const beaten of beatenChesses) {
+    const beatenPiece = gameData.playerChess[beaten.player][beaten.chessIndex];
+    beatenPiece.position = -1;
+    beatenPiece.finished = false;
   }
+  const baseDistance = pendingMove.fromPosition < 0 ? 0 : pendingMove.diceValue;
+  const specialDistance = Math.max(0, finalPosition - pendingMove.targetPosition);
+  const bounceDistance = pendingMove.fromPosition < 0
+    ? 0
+    : Math.max(0, pendingMove.fromPosition + pendingMove.diceValue - 56);
+  gameData.movementDistance[player] = (gameData.movementDistance[player] || 0) + baseDistance + specialDistance;
+  gameData.bounceDistance[player] = (gameData.bounceDistance[player] || 0) + bounceDistance;
+  delete gameData._pendingMove;
+  console.log(`[finalMoveResult] 更新服务器棋子状态: 玩家${player}棋子${chessIndex} 位置=${finalPosition}`);
 
   target.broadcast({
     type: 'finalMoveResult',
     playerId,
-    player: message.player,
-    chessIndex: message.chessIndex,
-    finalPosition: message.finalPosition,
-    beatenChesses: message.beatenChesses,
+    player,
+    chessIndex,
+    finalPosition,
+    beatenChesses,
     extraInfo: message.extraInfo,
     timestamp: message.timestamp
   });
@@ -4243,23 +4233,8 @@ function handleNoMovableChess(ws, playerId, message) {
 // 棋子移动（使用游戏会话中间件）
 const handlePieceMove = withGameSessionValidation((ws, playerId, message, gameSession) => {
   const { pieceId, fromPosition, toPosition, timestamp } = message;
-  // 解析玩家颜色和棋子索引
-  const playerColor = Math.floor(pieceId / 4) + 1;
-  const chessIndex = pieceId % 4;
 
-  // 更新棋子状态
-  if (gameSession.gameData.playerChess[playerColor]?.[chessIndex]) {
-    gameSession.gameData.playerChess[playerColor][chessIndex].position = toPosition;
-    // 终点/起点状态更新
-    if (toPosition === 56) {
-      gameSession.gameData.playerChess[playerColor][chessIndex].finished = true;
-    } else if (toPosition === -1) {
-      gameSession.gameData.playerChess[playerColor][chessIndex].finished = false;
-    }
-    console.log(`更新棋子状态: 玩家${playerColor}棋子${chessIndex} 从${fromPosition}到${toPosition}`);
-  }
-
-  // 广播移动结果
+  // 动画分步消息不修改服务端棋盘；权威位置只在 finalMoveResult 校验后更新。
   gameSession.broadcast({
     type: 'pieceMove',
     playerId,
@@ -4317,16 +4292,8 @@ function handleNicknameChange(ws, playerId, message) {
 // 棋子移动（游戏内）
 const handleChessMove = withGameSessionValidation((ws, playerId, message, gameSession) => {
   const { player, chessIndex, position, fromPosition, toPosition, moveType, timestamp } = message;
-  // 更新棋子状态
-  if (gameSession.gameData.playerChess[player]?.[chessIndex]) {
-    gameSession.gameData.playerChess[player][chessIndex].position = position;
-    if (position === 56) {
-      gameSession.gameData.playerChess[player][chessIndex].finished = true;
-    }
-    console.log(`更新棋子状态: 玩家${player}棋子${chessIndex} 到${position}${moveType ? ` (${moveType})` : ''}`);
-  }
 
-  // 广播移动结果
+  // 这里只同步动画，避免客户端用中间帧改写服务端权威棋盘。
   gameSession.broadcast({
     type: 'chessMove',
     playerId,
@@ -4489,14 +4456,8 @@ const handleMoveChessToStart = withGameSessionValidation((ws, playerId, message,
 // 棋子到达终点（使用游戏会话中间件）
 const handleMoveChessToFinish = withGameSessionValidation((ws, playerId, message, gameSession) => {
   const { player, chessIndex, timestamp } = message;
-  // 更新棋子状态
-  if (gameSession.gameData.playerChess[player]?.[chessIndex]) {
-    gameSession.gameData.playerChess[player][chessIndex].position = 56;
-    gameSession.gameData.playerChess[player][chessIndex].finished = true;
-    console.log(`更新棋子状态: 玩家${player}棋子${chessIndex} 到达终点`);
-  }
 
-  // 广播结果
+  // 终点动画不修改权威棋盘；finalMoveResult 会校验该步确实可以到达 56。
   gameSession.broadcast({
     type: 'moveChessToFinish',
     playerId,

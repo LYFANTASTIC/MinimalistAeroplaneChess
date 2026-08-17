@@ -705,6 +705,10 @@ class ChessPiece {
                         }
                         this.animation.moveChessToFinish(player, chessIndex);
 
+                        if (!this._isNetworkReplayMode && this.gameState.isOnlineMultiplayer && window.gameInstance && window.gameInstance.multiplayerGameManager) {
+                            window.gameInstance.multiplayerGameManager.syncFinalMoveResult(player, chessIndex, 56, this._currentMoveBeatenChesses);
+                        }
+
                         // 棋子完成后，检查该玩家是否获胜
                         if (this.checkWinner()) {
                             this.gameState.winner = player;
@@ -787,6 +791,10 @@ class ChessPiece {
                                 this.gameState.updateChessPosition(stackedChess.player, stackedChess.chessIndex, -1);
                                 this.gameState.setChessFinished(stackedChess.player, stackedChess.chessIndex, false);
                                 this.animation.moveChessToStart(stackedChess.player, stackedChess.chessIndex, null, true); // skipSync=true，不同步为beat
+                            }
+
+                            if (!_collisionReplayMode && this.gameState.isOnlineMultiplayer && window.gameInstance && window.gameInstance.multiplayerGameManager) {
+                                window.gameInstance.multiplayerGameManager.syncFinalMoveResult(player, chessIndex, -1, this._currentMoveBeatenChesses);
                             }
 
                             // 更新所有棋子位置

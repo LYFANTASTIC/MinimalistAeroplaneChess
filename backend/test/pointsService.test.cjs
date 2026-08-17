@@ -220,3 +220,22 @@ test('settlement flush retries a transient reward that exhausted background atte
   assert.equal(successes.length, 1);
   assert.equal(queue.pendingCount(), 0);
 });
+
+test('durable settlement flush waits until a transient reward succeeds', async () => {
+  let attempts = 0;
+  const queue = createRewardRetryQueue({
+    award: async () => {
+      attempts += 1;
+      if (attempts < 6) throw Object.assign(new Error('database unavailable'), { code: '08006' });
+      return { amount: 47.61, balance: 147.61 };
+    },
+    retryDelays: [0],
+    sleep: async () => {}
+  });
+
+  await assert.rejects(queue.enqueue(defeatInput()), /database unavailable/);
+  await queue.flushPendingForMatch(MATCH_ID, { retryUntilAvailable: true });
+
+  assert.equal(attempts, 6);
+  assert.equal(queue.pendingCount(), 0);
+});

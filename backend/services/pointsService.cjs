@@ -96,27 +96,43 @@ function createRewardRetryQueue({
     return promise;
   }
 
-  async function flushPendingForMatch(matchId) {
-    const promises = Array.from(pending.values())
-      .filter(entry => entry.matchId === matchId)
-      .map(entry => entry.promise);
-    await Promise.allSettled(promises);
+  async function flushPendingForMatch(matchId, { retryUntilAvailable = false } = {}) {
+    let retryIndex = 0;
+    while (true) {
+      const promises = Array.from(pending.values())
+        .filter(entry => entry.matchId === matchId)
+        .map(entry => entry.promise);
+      await Promise.allSettled(promises);
 
-    const retries = Array.from(deferredFailures.entries())
-      .filter(([, entry]) => entry.matchId === matchId);
-    for (const [key, entry] of retries) {
-      try {
-        const result = await award(entry.input);
-        deferredFailures.delete(key);
-        try { entry.callbacks.onSuccess?.(result); } catch (callbackError) {
-          console.error('[账户积分] 结算重试成功回调失败:', callbackError);
-        }
-      } catch (error) {
-        if (!isRetryableDatabaseError(error)) deferredFailures.delete(key);
-        try { entry.callbacks.onFailure?.(error); } catch (callbackError) {
-          console.error('[账户积分] 结算重试失败回调失败:', callbackError);
+      const retries = Array.from(deferredFailures.entries())
+        .filter(([, entry]) => entry.matchId === matchId);
+      if (retries.length === 0) return;
+
+      let transientFailure = null;
+      let permanentFailure = null;
+      for (const [key, entry] of retries) {
+        try {
+          const result = await award(entry.input);
+          deferredFailures.delete(key);
+          try { entry.callbacks.onSuccess?.(result); } catch (callbackError) {
+            console.error('[账户积分] 结算重试成功回调失败:', callbackError);
+          }
+        } catch (error) {
+          if (isRetryableDatabaseError(error)) transientFailure ||= error;
+          else {
+            deferredFailures.delete(key);
+            permanentFailure ||= error;
+          }
+          try { entry.callbacks.onFailure?.(error); } catch (callbackError) {
+            console.error('[账户积分] 结算重试失败回调失败:', callbackError);
+          }
         }
       }
+      if (permanentFailure) throw permanentFailure;
+      if (!transientFailure || !retryUntilAvailable) return;
+      const delayIndex = Math.min(retryIndex, Math.max(0, retryDelays.length - 1));
+      await sleep(retryDelays[delayIndex] ?? 0);
+      retryIndex += 1;
     }
   }
 
