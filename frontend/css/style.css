@@ -7512,3 +7512,6 @@ use[href="#checkmark"] {
 .account-points-toast.is-failed {
     background: rgba(145, 66, 52, .94);
 }
+[data-items-feature][hidden] {
+    display: none !important;
+}

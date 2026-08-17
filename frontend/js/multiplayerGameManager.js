@@ -7,6 +7,7 @@ import { activePlayerManager } from './activePlayerManager.js';
 import { playerIdManager } from './playerIdManager.js';
 import { handleAuthenticationExpired } from './authGuard.js';
 import { accountPoints } from './accountPoints.js';
+import { ITEMS_ENABLED } from './config/features.js';
 
 // 声明全局变量，这些变量在游戏运行时会被设置
 let gameState, uiUpdater, gameInfo;
@@ -800,7 +801,7 @@ class MultiplayerGameManager {
             this.gameInitialized = true;
             
             // 检查是否是道具模式，如果是则初始化积分管理器
-            const isSkillMode = data.room && data.room.settings && data.room.settings.skillMode === true;
+            const isSkillMode = ITEMS_ENABLED && data.room?.settings?.skillMode === true;
             if (isSkillMode) {
                 // 更新sessionStorage，让积分管理器能读取到正确的配置
                 const configStr = sessionStorage.getItem('gameConfig');
@@ -940,6 +941,9 @@ class MultiplayerGameManager {
                 break;
             case 'accountPointsSyncFailed':
                 accountPoints.handleFailed(data);
+                break;
+            case 'itemsDisabled':
+                console.info(data.message || '道具功能当前未开放');
                 break;
             case 'stackCollision':
                 this.handleStackCollision(data);

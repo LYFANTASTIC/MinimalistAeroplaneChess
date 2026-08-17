@@ -203,7 +203,7 @@
                                                 <span>更多模式</span>
                                                 <span class="toggle-group-help" onclick="showModeRulesModal()">?</span>
                                             </div>
-                                            <div class="toggle-option">
+                                            <div class="toggle-option" data-items-feature hidden aria-hidden="true">
                                                 <span class="toggle-label-text">道具模式</span>
                                                 <label class="toggle-switch">
                                                     <input type="checkbox" id="localSkillModeCheckbox">
@@ -429,7 +429,7 @@
                                                         <span>更多模式</span>
                                                         <span class="toggle-group-help" onclick="showModeRulesModal()">?</span>
                                                     </div>
-                                                    <div class="toggle-option">
+                                                    <div class="toggle-option" data-items-feature hidden aria-hidden="true">
                                                         <span class="toggle-label-text">道具模式</span>
                                                         <label class="toggle-switch">
                                                             <input type="checkbox" id="skillModeCheckbox">
@@ -622,7 +622,7 @@
                                                 <span>更多模式</span>
                                                 <span class="toggle-group-help" onclick="showModeRulesModal()">?</span>
                                             </div>
-                                            <div class="toggle-option">
+                                            <div class="toggle-option" data-items-feature hidden aria-hidden="true">
                                                 <span class="toggle-label-text">道具模式</span>
                                                 <label class="toggle-switch">
                                                     <input type="checkbox" id="aiSkillModeCheckbox">
@@ -854,7 +854,7 @@
                 <button class="mode-rules-close" onclick="hideModeRulesModal()" type="button">&times;</button>
             </div>
             <div class="mode-rules-popup-body">
-                <div class="mode-rule-section">
+                <div class="mode-rule-section" data-items-feature hidden aria-hidden="true">
                     <h3>道具模式</h3>
                     <ul>
                         <li>击败对手棋子可获得积分，积分上限 100。</li>
@@ -873,7 +873,7 @@
                         <li>无撞机 — 棋子之间不发生碰撞。</li>
                         <li>碰撞奖励 — 落在其他玩家棋子上奖励前进敌方棋子数×2步。</li>
                         <li>奖励可连锁触发 — 奖励落地后再次踩到继续奖励，过程中触发跳子/飞棋正常执行。</li>
-                        <li>道具模式下碰撞奖励同时获得积分奖励。</li>
+                        <li data-items-feature hidden aria-hidden="true">道具模式下碰撞奖励同时获得积分奖励。</li>
                     </ul>
                 </div>
             </div>

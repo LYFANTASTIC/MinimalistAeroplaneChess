@@ -20,6 +20,7 @@ import { energyManager } from './energyManager.js';
 import { energyDisplay } from './energyDisplay.js';
 import { skillManager } from './skillManager.js';
 import { WebSocketClient } from './websocketClient.js';
+import { ITEMS_ENABLED, applyItemsFeatureState } from './config/features.js';
 
 class FlyingChessGame {
     constructor() {
@@ -83,6 +84,7 @@ class FlyingChessGame {
     // 初始化游戏
     initializeGame() {
         try {
+            applyItemsFeatureState();
             // 确保音频管理器处于开启状态
             audioManager.unmute();
             // 更新音频开关按钮文本
@@ -329,14 +331,14 @@ class FlyingChessGame {
                 // 本地多人模式
                 const playerCount = gameConfig.players?.length || gameConfig.playerCount || 4;
                 const pieceCount = gameConfig.pieceCount || 4;
-                const skillMode = gameConfig.skillMode === true;
+                const skillMode = ITEMS_ENABLED && gameConfig.skillMode === true;
                 const modeText = skillMode ? '道具模式' : '标准模式';
                 titleText = `本地多人-${playerCount}人${pieceCount}棋子-${modeText}`;
             } else if (gameConfig.mode === 'online_multiplayer') {
                 // 在线多人模式
                 const playerCount = gameConfig.playerCount || 4;
                 const pieceCount = gameConfig.pieceCount || 4;
-                const skillMode = gameConfig.skillMode === true;
+                const skillMode = ITEMS_ENABLED && gameConfig.skillMode === true;
                 const modeText = skillMode ? '道具模式' : '标准模式';
                 titleText = `在线多人-${playerCount}人${pieceCount}棋子-${modeText}`;
             } else {
@@ -345,7 +347,7 @@ class FlyingChessGame {
                     ? 1 + gameConfig.bots.length  // 1个人类玩家 + bot数量
                     : (gameConfig.playerCount || 4);
                 const pieceCount = gameConfig.pieceCount || 4;
-                const skillMode = gameConfig.skillMode === true;
+                const skillMode = ITEMS_ENABLED && gameConfig.skillMode === true;
                 const modeText = skillMode ? '道具模式' : '标准模式';
                 titleText = `人机对战-${playerCount}人${pieceCount}棋子-${modeText}`;
             }

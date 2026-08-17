@@ -12,11 +12,20 @@ const { createAccountHandlers } = require('./routes/accountRoutes.cjs');
 const { buildMatchRecord, buildSettlementRecord } = require('./services/matchLifecycle.cjs');
 const { createPointsService } = require('./services/pointsService.cjs');
 const { createRewardMessageHandler } = require('./services/rewardMessageHandler.cjs');
+const { ITEMS_ENABLED } = require('./config/features.cjs');
 
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 const ROOM_CHAT_MAX_MESSAGES = 50;
+const ITEM_MESSAGE_TYPES = new Set([
+  'teleportIcon',
+  'polyhedralDice',
+  'mysteryBoxIcon',
+  'removeMysteryBoxIcon',
+  'energyGainAnimation',
+  'energyChange'
+]);
 
 // 中间件
 app.set('trust proxy', 1);
@@ -377,7 +386,7 @@ class RoomManager {
         code: room.code,
         name: room.name,
         pieceCount: room.settings?.pieceCount ?? 4,
-        skillMode: !!(room.settings?.skillMode),
+        skillMode: ITEMS_ENABLED && !!room.settings?.skillMode,
         happyMode: !!(room.settings?.happyMode),
         launchNumber: room.settings?.launchNumber ?? 'even',
         teamMode: !!room.settings?.teamMode,
@@ -587,7 +596,7 @@ class GameSession {
     this.pieceCount = pieceCount;
     this.roomCode = roomCode;
     this.hostId = hostId;
-    this.skillMode = skillMode;
+    this.skillMode = ITEMS_ENABLED && skillMode === true;
     this.happyMode = happyMode;
     this.launchNumber = launchNumber;
     this.teamMode = teamMode;
@@ -978,7 +987,7 @@ class Room {
     const nextSettings = settings && typeof settings === 'object' ? settings : {};
 
     if (Object.prototype.hasOwnProperty.call(nextSettings, 'skillMode')) {
-      this.settings.skillMode = nextSettings.skillMode === true;
+      this.settings.skillMode = ITEMS_ENABLED && nextSettings.skillMode === true;
     }
     if (Object.prototype.hasOwnProperty.call(nextSettings, 'happyMode')) {
       this.settings.happyMode = nextSettings.happyMode === true;
@@ -1075,7 +1084,10 @@ class Room {
         emoji: profile.emoji
       })),
       playerReadyStatus: Object.fromEntries(this.playerReadyStatus),
-      settings: this.settings,
+      settings: {
+        ...this.settings,
+        skillMode: ITEMS_ENABLED && this.settings.skillMode === true
+      },
       roomChatHistory: this.roomChatHistory
     };
   }
@@ -1765,6 +1777,14 @@ wss.on('connection', async (ws, req) => {
 function handleMessage(ws, playerId, message) {
   console.log(`处理消息类型: ${message.type}, 玩家: ${playerId}`);
   try {
+    if (!ITEMS_ENABLED && ITEM_MESSAGE_TYPES.has(message.type)) {
+      ws.send(JSON.stringify({
+        type: 'itemsDisabled',
+        message: '道具功能当前未开放'
+      }));
+      return;
+    }
+
     switch (message.type) {
       // ... (rest of the code remains the same)
       case 'ping':
@@ -2891,7 +2911,7 @@ function handleStartGame(ws, playerId) {
     room.settings.pieceCount,
     room.code,
     hostPlayer ? hostPlayer.id : null,
-    room.settings.skillMode,
+    ITEMS_ENABLED && room.settings.skillMode,
     room.settings.happyMode,
     room.settings.launchNumber,
     room.settings.teamMode,
@@ -2938,7 +2958,7 @@ function handleStartGame(ws, playerId) {
     type: 'gameStarted',
     gameSessionId,
     pieceCount: room.settings.pieceCount,
-    skillMode: room.settings.skillMode || false,
+    skillMode: ITEMS_ENABLED && room.settings.skillMode === true,
     happyMode: room.settings.happyMode || false,
     launchNumber: room.settings.launchNumber || 'even',
     teamMode: room.settings.teamMode || false,

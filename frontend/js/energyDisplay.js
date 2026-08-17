@@ -2,6 +2,8 @@
  * 积分显示管理器 - 处理积分条UI显示
  */
 
+import { ITEMS_ENABLED } from './config/features.js';
+
 class EnergyDisplay {
     constructor() {
         this.energyBars = {}; // 存储每个玩家的积分条元素
@@ -12,6 +14,8 @@ class EnergyDisplay {
      * 初始化积分条UI
      */
     init() {
+        if (!ITEMS_ENABLED) return;
+
         // 为每个玩家创建积分条
         for (let player = 1; player <= 4; player++) {
             this.createEnergyBar(player);

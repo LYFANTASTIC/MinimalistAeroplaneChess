@@ -21,6 +21,7 @@ import { energyDisplay } from './energyDisplay.js';
 import { skillManager } from './skillManager.js';
 import { lightningManager } from './lightningManager.js';
 import { accountPoints } from './accountPoints.js';
+import { ITEMS_ENABLED, applyItemsFeatureState } from './config/features.js';
 
 class FlyingChessGame {
     constructor() {
@@ -181,6 +182,7 @@ class FlyingChessGame {
     // 初始化游戏
     initializeGame() {
         try {
+            applyItemsFeatureState();
             audioManager.unmute();
             // 更新音频开关按钮文本
             const toggleAudioBtn = document.getElementById('toggleAudio');
@@ -244,11 +246,12 @@ class FlyingChessGame {
             this.initializeControlButtonsVisibility();
 
             // 13. 初始化积分系统（仅在道具模式下）
-            this.energyManager.init();
-            // 始终初始化道具管理器（用于控制道具按钮的显示/隐藏）
-            this.skillManager.init();
-            if (this.energyManager.isSkillModeEnabled()) {
-                this.energyDisplay.init();
+            if (ITEMS_ENABLED) {
+                this.energyManager.init();
+                this.skillManager.init();
+                if (this.energyManager.isSkillModeEnabled()) {
+                    this.energyDisplay.init();
+                }
             }
 
             // 14. 初始化最后应用视角旋转（在UI全部创建完成后）
@@ -373,7 +376,7 @@ class FlyingChessGame {
                     mode: 'online_multiplayer',
                     playerCount: multiplayerGameData.players ? multiplayerGameData.players.length : 2,
                     pieceCount: multiplayerGameData.pieceCount || 4,
-                    skillMode: multiplayerGameData.skillMode || false,
+                    skillMode: ITEMS_ENABLED && multiplayerGameData.skillMode === true,
                     happyMode: multiplayerGameData.happyMode || false
                 };
                 this.updatePageTitle(multiplayerConfig);
@@ -691,7 +694,7 @@ class FlyingChessGame {
                 // 本地多人模式
                 const playerCount = gameConfig.players?.length || gameConfig.playerCount || 4;
                 const pieceCount = gameConfig.pieceCount || 4;
-                const skillMode = gameConfig.skillMode === true;
+                const skillMode = ITEMS_ENABLED && gameConfig.skillMode === true;
                 const happyMode = gameConfig.happyMode === true;
                 let modeText = skillMode ? '道具模式' : '标准模式';
                 if (happyMode) modeText += '·欢乐';
@@ -700,7 +703,7 @@ class FlyingChessGame {
                 // 在线多人模式
                 const playerCount = gameConfig.playerCount || 4;
                 const pieceCount = gameConfig.pieceCount || 4;
-                const skillMode = gameConfig.skillMode === true;
+                const skillMode = ITEMS_ENABLED && gameConfig.skillMode === true;
                 const happyMode = gameConfig.happyMode === true;
                 let modeText = skillMode ? '道具模式' : '标准模式';
                 if (happyMode) modeText += '·欢乐';
@@ -711,7 +714,7 @@ class FlyingChessGame {
                     ? 1 + gameConfig.bots.length  // 1个人类玩家 + bot数量
                     : (gameConfig.playerCount || 4);
                 const pieceCount = gameConfig.pieceCount || 4;
-                const skillMode = gameConfig.skillMode === true;
+                const skillMode = ITEMS_ENABLED && gameConfig.skillMode === true;
                 const happyMode = gameConfig.happyMode === true;
                 let modeText = skillMode ? '道具模式' : '标准模式';
                 if (happyMode) modeText += '·欢乐';

@@ -6,6 +6,7 @@
 // 导入重连管理器
 import { reconnectManager } from './reconnectManager.js';
 import { nicknameGenerator } from './nicknameGenerator.js';
+import { ITEMS_ENABLED, applyItemsFeatureState } from './config/features.js';
 
 class MultiplayerManager {
     constructor() {
@@ -131,6 +132,7 @@ class MultiplayerManager {
 
     async init() {
         try {
+            applyItemsFeatureState();
             // 动态导入表情数据
             const emojiModule = await import('../assets/emojis.js');
             this.emojis = emojiModule.emojis;
@@ -396,7 +398,7 @@ class MultiplayerManager {
 
         // 道具模式复选框事件
         const skillModeCheckbox = document.getElementById('skillModeCheckbox');
-        if (skillModeCheckbox) {
+        if (ITEMS_ENABLED && skillModeCheckbox) {
             skillModeCheckbox.addEventListener('change', (e) => {
                 if (this.isHost && this.wsClient) {
                     const skillMode = e.target.checked;
@@ -1332,7 +1334,7 @@ class MultiplayerManager {
                     // 同步道具模式复选框状态
                     const skillModeCheckbox = document.getElementById('skillModeCheckbox');
                     if (skillModeCheckbox && roomData.settings) {
-                        skillModeCheckbox.checked = roomData.settings.skillMode || false;
+                        skillModeCheckbox.checked = ITEMS_ENABLED && roomData.settings.skillMode === true;
                         console.log('[配置] 创建房间时初始化道具模式:', roomData.settings.skillMode);
                     }
                     // 同步欢乐模式复选框状态
@@ -1507,7 +1509,7 @@ class MultiplayerManager {
                 // 同步道具模式复选框状态
                 const skillModeCheckbox = document.getElementById('skillModeCheckbox');
                 if (skillModeCheckbox && data.room.settings) {
-                    skillModeCheckbox.checked = data.room.settings.skillMode || false;
+                    skillModeCheckbox.checked = ITEMS_ENABLED && data.room.settings.skillMode === true;
                     console.log('[配置] 加入房间时同步道具模式:', data.room.settings.skillMode);
                 }
                 // 同步欢乐模式复选框状态
@@ -2125,7 +2127,7 @@ class MultiplayerManager {
                 // 更新道具模式复选框状态
                 const skillModeCheckbox = document.getElementById('skillModeCheckbox');
                 if (skillModeCheckbox && data.settings.skillMode !== undefined) {
-                    skillModeCheckbox.checked = data.settings.skillMode;
+                    skillModeCheckbox.checked = ITEMS_ENABLED && data.settings.skillMode === true;
                     console.log('[配置] 道具模式复选框已更新:', data.settings.skillMode);
                 }
                 // 更新欢乐模式复选框状态
@@ -2262,7 +2264,7 @@ class MultiplayerManager {
 
             const mode = document.createElement('div');
             mode.className = 'public-room-mode';
-            const skillMode = room.skillMode;
+            const skillMode = ITEMS_ENABLED && room.skillMode === true;
             const happyMode = room.happyMode;
             if (happyMode && skillMode) {
                 mode.textContent = '道欢';
@@ -3132,8 +3134,7 @@ class MultiplayerManager {
         if (gameConfigInfo) {
             const pieceCount = (this.currentRoom && this.currentRoom.settings && this.currentRoom.settings.pieceCount)
                 ? this.currentRoom.settings.pieceCount : 4;
-            const skillMode = (this.currentRoom && this.currentRoom.settings && this.currentRoom.settings.skillMode)
-                ? this.currentRoom.settings.skillMode : false;
+            const skillMode = ITEMS_ENABLED && this.currentRoom?.settings?.skillMode === true;
             const happyMode = (this.currentRoom && this.currentRoom.settings && this.currentRoom.settings.happyMode)
                 ? this.currentRoom.settings.happyMode : false;
             const launchNumber = this.currentRoom?.settings?.launchNumber ?? 'even';
@@ -4350,9 +4351,9 @@ class MultiplayerManager {
         allPlayers.sort((a, b) => a.color - b.color);
 
         // 读取道具模式设置（优先从服务器传递的数据读取，否则从房间设置读取）
-        const skillModeEnabled = gameData.skillMode !== undefined
+        const skillModeEnabled = ITEMS_ENABLED && (gameData.skillMode !== undefined
             ? gameData.skillMode
-            : (this.currentRoom?.settings?.skillMode || false);
+            : (this.currentRoom?.settings?.skillMode || false));
         console.log('[配置] 道具模式:', skillModeEnabled, '(isHost:', this.isHost, ')');
 
         // 读取欢乐模式设置
@@ -4468,9 +4469,9 @@ class MultiplayerManager {
 
         // 读取道具模式设置（重连时从服务器数据或房间设置读取）
         const gameData = data.gameData || data;
-        const skillModeEnabled = gameData.skillMode !== undefined
+        const skillModeEnabled = ITEMS_ENABLED && (gameData.skillMode !== undefined
             ? gameData.skillMode
-            : (this.currentRoom?.settings?.skillMode || false);
+            : (this.currentRoom?.settings?.skillMode || false));
         console.log('[配置] 重连时道具模式:', skillModeEnabled);
         const happyModeEnabled = gameData.happyMode !== undefined
             ? gameData.happyMode

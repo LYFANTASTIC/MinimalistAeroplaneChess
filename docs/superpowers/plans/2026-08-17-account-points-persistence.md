@@ -300,10 +300,10 @@ For欢乐模式 send `eventType: 'happy_collision'`, target seat/pieces, and ene
 - Modify: `backend/server.cjs:720-940, 1698-1875`
 - Create: `frontend/test/itemsDisabled.test.mjs`
 
-- [ ] Write a source/DOM test that verifies item UI roots use a `data-items-feature` marker, the browser flag is false, room serialization forces `skillMode: false`, and the server rejects or ignores item messages while disabled.
-- [ ] Add `data-items-feature hidden aria-hidden="true"` to retained item settings, rules, progress bars, and skill panels. Do not remove the child markup.
-- [ ] At the browser entry points, call a helper that hides every `[data-items-feature]` node and forces stored/configured `skillMode` to false.
-- [ ] At manager entry points, use explicit guards:
+- [x] Write a source/DOM test that verifies item UI roots use a `data-items-feature` marker, the browser flag is false, room serialization forces `skillMode: false`, and the server rejects or ignores item messages while disabled.
+- [x] Add `data-items-feature hidden aria-hidden="true"` to retained item settings, rules, progress bars, and skill panels. Do not remove the child markup.
+- [x] At the browser entry points, call a helper that hides every `[data-items-feature]` node and forces stored/configured `skillMode` to false.
+- [x] At manager entry points, use explicit guards:
 
 ```js
 import { ITEMS_ENABLED } from './config/features.js';
@@ -314,10 +314,10 @@ if (!ITEMS_ENABLED) {
 }
 ```
 
-- [ ] Force all room creation, updates, public listings, session setup, reconnect payloads, and spectator payloads to expose `skillMode: false` while the flag is off.
-- [ ] Group retained item WebSocket types in the server and return an `itemsDisabled` response before their handlers run. Leave handler functions untouched.
-- [ ] Remove no item modules or implementation functions. Do not turn whole files into comments.
-- [ ] Run item-disabled tests, backend tests, and the frontend build.
+- [x] Force all room creation, updates, public listings, session setup, reconnect payloads, and spectator payloads to expose `skillMode: false` while the flag is off.
+- [x] Group retained item WebSocket types in the server and return an `itemsDisabled` response before their handlers run. Leave handler functions untouched.
+- [x] Remove no item modules or implementation functions. Do not turn whole files into comments.
+- [x] Run item-disabled tests, backend tests, and the frontend build.
 - [ ] Commit: `feat: disable item mode behind feature flag`
 
 ## Task 9: Update account and settlement interfaces

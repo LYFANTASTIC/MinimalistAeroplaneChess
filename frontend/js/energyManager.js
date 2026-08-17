@@ -4,6 +4,7 @@
  */
 
 import { gameState } from './gameState.js';
+import { ITEMS_ENABLED } from './config/features.js';
 
 class EnergyManager {
     constructor() {
@@ -34,6 +35,12 @@ class EnergyManager {
      * 初始化积分系统
      */
     init() {
+        if (!ITEMS_ENABLED) {
+            this.skillModeEnabled = false;
+            this._updateHintText();
+            return;
+        }
+
         // 检查是否启用道具模式
         try {
             const gameConfigStr = sessionStorage.getItem('gameConfig');
@@ -74,7 +81,7 @@ class EnergyManager {
      * 检查是否启用道具模式
      */
     isSkillModeEnabled() {
-        return this.skillModeEnabled;
+        return ITEMS_ENABLED && this.skillModeEnabled;
     }
 
     /**

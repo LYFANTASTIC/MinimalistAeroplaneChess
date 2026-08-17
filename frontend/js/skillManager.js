@@ -5,6 +5,7 @@
 import { energyManager } from './energyManager.js';
 import { gameState } from './gameState.js';
 import { gameInfo } from './gameInfo.js';
+import { ITEMS_ENABLED } from './config/features.js';
 
 class SkillManager {
     constructor() {
@@ -23,7 +24,7 @@ class SkillManager {
     init() {
         // 检查是否启用道具模式
         const isSpectator = window.multiplayerGameManager && window.multiplayerGameManager.isSpectator;
-        if (!energyManager.isSkillModeEnabled() || isSpectator) {
+        if (!ITEMS_ENABLED || !energyManager.isSkillModeEnabled() || isSpectator) {
             // 隐藏道具按钮
             const skillBtn = document.getElementById('skillBtn');
             if (skillBtn) {
@@ -158,6 +159,10 @@ class SkillManager {
     updateButtonVisibility() {
         const skillBtn = document.getElementById('skillBtn');
         if (!skillBtn) return;
+        if (!ITEMS_ENABLED) {
+            skillBtn.style.display = 'none';
+            return;
+        }
         const isSpectator = window.multiplayerGameManager && window.multiplayerGameManager.isSpectator;
         const isSkillMode = energyManager.isSkillModeEnabled();
         const loadingIndicator = document.getElementById('loadingIndicator');

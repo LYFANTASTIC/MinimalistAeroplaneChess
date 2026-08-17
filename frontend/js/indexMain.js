@@ -3,7 +3,9 @@ import { MultiplayerManager } from './multiplayerManager.js';
 import { nicknameGenerator } from './nicknameGenerator.js';
 import { audioManager } from './audioManager.js';
 import './accountStatus.js';
+import { ITEMS_ENABLED, applyItemsFeatureState } from './config/features.js';
 window.audioManager = audioManager;
+applyItemsFeatureState();
 
 // 页面完全加载后，在浏览器空闲时静默预加载音频，不影响首屏体验
 window.addEventListener('load', () => {
@@ -74,6 +76,9 @@ class GameTipsCarousel {
             "请尽量不要离开游戏页面，以免断线！",
             "私密房间不会出现在房间列表"
         ];
+        if (!ITEMS_ENABLED) {
+            this.tips = this.tips.filter(tip => !/道具|积分|盲盒|传送门|多面骰子|遥控骰子/.test(tip));
+        }
         this.currentIndex = 0;
         this.tipElement = null;
         this.interval = null;
@@ -1582,7 +1587,7 @@ class PlayerSetup {
 
         // 获取道具模式开关状态
         const skillModeCheckbox = document.getElementById('aiSkillModeCheckbox');
-        const skillMode = skillModeCheckbox ? skillModeCheckbox.checked : false;
+        const skillMode = ITEMS_ENABLED && skillModeCheckbox ? skillModeCheckbox.checked : false;
         const happyModeCheckbox = document.getElementById('aiHappyModeCheckbox');
         const happyMode = happyModeCheckbox ? happyModeCheckbox.checked : false;
 
@@ -1637,7 +1642,7 @@ class PlayerSetup {
 
         // 获取道具模式开关状态
         const skillModeCheckbox = document.getElementById('localSkillModeCheckbox');
-        const skillMode = skillModeCheckbox ? skillModeCheckbox.checked : false;
+        const skillMode = ITEMS_ENABLED && skillModeCheckbox ? skillModeCheckbox.checked : false;
         const happyModeCheckbox = document.getElementById('localHappyModeCheckbox');
         const happyMode = happyModeCheckbox ? happyModeCheckbox.checked : false;
 
@@ -1773,7 +1778,7 @@ class PlayerSetup {
                 if (config.skillMode !== undefined) {
                     const skillModeCheckbox = document.getElementById('aiSkillModeCheckbox');
                     if (skillModeCheckbox) {
-                        skillModeCheckbox.checked = config.skillMode;
+                        skillModeCheckbox.checked = ITEMS_ENABLED && config.skillMode === true;
                         console.log('恢复道具模式状态:', config.skillMode);
                     }
                 }
@@ -1852,7 +1857,7 @@ class PlayerSetup {
                 if (config.skillMode !== undefined) {
                     const skillModeCheckbox = document.getElementById('localSkillModeCheckbox');
                     if (skillModeCheckbox) {
-                        skillModeCheckbox.checked = config.skillMode;
+                        skillModeCheckbox.checked = ITEMS_ENABLED && config.skillMode === true;
                         console.log('恢复本地多人道具模式状态:', config.skillMode);
                     }
                 }
