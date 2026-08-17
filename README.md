@@ -29,8 +29,10 @@
 - **人机对战**：内置智能 AI 算法。提供**简单**与**困难**两级难度，困难 AI 会分析场上局势（如击败概率、终点距离等）进行决策。支持随时开启/关闭 AI 托管，并提供**加速模式**以大幅提升游戏节奏。（详见 [AI 决策流程逻辑](docs/AI决策.md)）
 - **本地多人**：支持 2-4 人在同一设备上进行游戏，适合线下好友聚会，完全不依赖网络连接。
 
-#### 创新道具模式
-在道具模式下，击败对手棋子可获得积分（详见 [积分点折算公式](docs/能量点折算公式.md)）。积攒积分可兑换以下四大强力道具，极大增加了游戏的策略深度：
+#### 账户积分与保留的道具模式
+登录玩家在联机对局中击落飞机后，会获得永久保存到个人账户的积分；欢乐模式发生碰撞时同样会获得账户积分。个人中心可查看当前积分、累计积分、胜场、对局、击落数、最近对局和积分明细。
+
+原道具模式实现仍完整保留在代码中，但当前功能开关为关闭状态，页面不会显示入口，服务端也不会执行道具消息。后续如需恢复，可在前后端功能开关中同步开启。保留的四种道具包括：
 - **盲盒**：随机补给道具，在积分不足时可能成为逆转局势的关键。
 - **传送门**：将棋子随机传送到地图上的空位置，可能快速前进，也可能面临倒退风险。
 - **多面骰子**：突破传统 6 点限制，随机投摇到 1-12 点，实现超远距离跨越。
@@ -39,7 +41,7 @@
 #### 欢乐模式
 欢乐模式大幅降低了对抗的挫败感，带来更轻松愉快的游戏体验：
 - **碰撞奖励**：棋子落在其他玩家棋子上时不再将其送回基地，而是根据敌方棋子数量奖励前进步数（每颗敌方棋子奖励 2 步），并自动连锁触发下一次碰撞检测。
-- **积分享受**：道具模式下碰撞同样可获得积分奖励。
+- **碰撞积分**：登录玩家发生欢乐碰撞时会获得永久账户积分。
 - **连投不惩罚**：连续三次掷出 6 点时不会受到"所有棋子回基地"的惩罚，而是获得连投奖励继续回合。
 - **叠子不阻挡**：跳子和飞棋路径上的叠子不会阻挡移动，飞棋终点叠子也不会触发撞机回基地。
 
@@ -65,7 +67,7 @@
 - **高性能渲染**：大量使用 SVG 矢量图形绘制棋盘与棋子，配合 CSS3 滤镜（feGaussianBlur）实现霓虹发光效果，在保证高颜值的同时兼顾渲染性能。
 - **硬件加速**：关键 UI 组件开启 GPU 合成加速，减少移动端 CPU 负载，解决交互滞后感。
 - **轻量级后端架构**：
-  - **无数据库设计**：所有实时对战状态、房间信息及游戏数据均通过 Node.js 内存管理，极大地降低了服务器部署成本与维护复杂度。提供 [管理 API](docs/API.md) 进行状态查询。
+  - **实时状态与持久数据分层**：房间和对局中的高频状态由 Node.js 内存管理，账户、钱包、战绩、对局结果和积分流水持久化到 PostgreSQL。提供 [管理 API](docs/API.md) 进行状态查询。
   - **高可用重连机制**：严密的掉线处理逻辑，支持玩家意外断线后的快速重连。重连后可瞬间恢复游戏数据。
   - **智能 AI 接管系统**：玩家离线或思考超时时自动切换至 AI 托管，确保对局不因个别玩家的行为而中断。
   - **物理隔断与迁移优化**：支持玩家在不同房间/游戏间静默迁移。通过底层的“物理隔断”清理技术，杜绝了房间切换时的消息泄漏与会话冲突。
@@ -111,7 +113,7 @@ npm run dev
 - 游戏昵称同步、个人资料修改、密码修改与退出登录
 - 电脑端、平板和手机端响应式界面
 
-本地账户数据默认保存在 `backend/data/users.json`，该目录不会提交到 Git。正式部署时请通过 `USER_DATA_FILE` 环境变量将文件指向持久化磁盘；若使用无持久化磁盘的托管方案，应先将账户存储迁移至 PostgreSQL 等外部数据库。
+账户、积分与对局历史现在使用 PostgreSQL。启动前复制 `.env.example` 为 `.env`，至少填写 `DATABASE_URL`；旧版 `backend/data/users.json` 只在一次性导入时读取，不再作为运行时存储。
 
 如需手动分开启动：
 
@@ -123,9 +125,68 @@ cd backend && npm run dev
 cd frontend && npm run dev
 ```
 
-### 部署到 Render（无需自备域名）
+### Supabase + Render 部署（大陆朋友优先低延迟）
 
-仓库内提供了 `render.yaml`。连接 Git 仓库并创建 Render Web Service 后，Render 会自动完成前端构建和 Node 服务启动，并分配一个 `*.onrender.com` 访问地址。当前免费实例适合功能预览；由于免费实例的本地文件不是持久化存储，正式开放注册前请配置持久化磁盘或外部数据库。
+本项目使用长期 WebSocket 连接，并把房间状态保存在单个 Node 进程内。推荐把 **Supabase 数据库和 Render Web Service 都放在新加坡**：数据库选择 Supabase `Southeast Asia (Singapore) / ap-southeast-1`，Render 选择 `Singapore`。同区部署可减少每次积分写入和账户查询的跨区往返；玩家到游戏服务器只保留一段公网链路。
+
+Vercel Functions 目前可以接收 WebSocket，但连接会受函数最大运行时长约束，后续连接也不保证落到同一实例。这个项目尚未把房间状态迁移到 Redis，因此不建议直接把后端改成 Vercel Functions。若只把静态前端放 Vercel，仍需单独保留 Render WebSocket 后端，并处理跨域与地址配置，朋友小范围使用时收益有限。参考：[Vercel WebSocket 说明](https://vercel.com/kb/guide/do-vercel-serverless-functions-support-websocket-connections)、[Supabase 连接方式](https://supabase.com/docs/guides/database/connecting-to-postgres)、[Supabase 区域](https://supabase.com/docs/guides/platform/regions)、[Render 区域](https://render.com/docs/regions)。
+
+#### 1. 创建数据库
+
+1. 在 Supabase 新建 Singapore 项目，保存数据库密码。
+2. 在项目页点击 **Connect** 复制连接串。
+3. Render 支持 IPv6 时优先使用 Direct connection；若连接失败或运行环境只有 IPv4，改用 **Supavisor Session mode**（端口 `5432`）。不要给这个长期运行的 Node 服务使用 Transaction mode `6543`。
+4. 在 Render 环境变量中配置：
+
+```env
+DATABASE_URL=postgresql://...
+DATABASE_SSL=true
+DATABASE_POOL_MAX=5
+```
+
+连接串含密码，不要提交到 Git、截图或聊天记录中。首次部署前可在本地检查：
+
+```bash
+npm --workspace backend run db:health
+npm --workspace backend run db:migrate
+```
+
+迁移文件为 `backend/migrations/001_account_points.sql`，会创建独立的 `app` schema，并通过迁移表和 advisory lock 防止重复执行。
+
+#### 2. 导入已有 JSON 用户（可选）
+
+先备份 `backend/data/users.json`。导入工具默认只校验，不写数据库：
+
+```bash
+# 仅校验
+npm --workspace backend run db:import-users
+
+# 确认数量后真正写入；重复用户会跳过
+npm --workspace backend run db:import-users -- --apply
+```
+
+文件在其他位置时设置 `USER_DATA_FILE`。导入会保留用户 ID、密码哈希和时间戳，因此旧账号无需重设密码。
+
+#### 3. 部署顺序
+
+1. 备份 JSON 用户文件。
+2. 执行数据库健康检查和 schema 迁移。
+3. 先 dry-run、再 apply 导入旧用户，并记录新增/跳过数量。
+4. 本地验证旧账号登录、注册和个人中心摘要。
+5. 连接仓库中的 `render.yaml` 创建 Render Web Service；该蓝图已固定 `singapore`，构建时会执行幂等迁移。
+6. 部署后验证创建房间、标准/欢乐碰撞、重连、结算和账户历史。
+7. 观察服务日志中的 `[账户积分]`、`[对局持久化]` 与重试信息。
+
+#### 4. 延迟设置
+
+- 数据库和 Node 服务保持同区；不要让服务器在东京、数据库在新加坡。
+- 使用持久 Web Service 与内置 `pg` 连接池，避免每次奖励重新建立数据库连接。
+- 小范围朋友局先将 `DATABASE_POOL_MAX=5`；扩容多个服务实例前必须先把内存房间状态外置，否则玩家可能连到不同实例。
+- 免费服务休眠后的第一次访问会较慢；若在意开局首次等待，使用不会休眠的实例。
+
+#### 5. 回滚
+
+如新版异常，直接重新部署旧版本代码，不要删除 `app` schema 或新表。旧版代码不会读取这些表，但数据仍可保留用于修复后恢复。新版积分不会双写回 JSON，因此回滚期间新增的对局积分不会出现在旧版 JSON 文件中。
 
 ---
 

@@ -348,14 +348,14 @@ if (!ITEMS_ENABLED) {
 - Modify: `.env.example`
 - Modify: `docs/superpowers/specs/2026-08-17-account-points-persistence-design.md` only if implementation revealed a necessary, approved correction
 
-- [ ] Document Supabase Singapore project creation, connection-string choice (direct IPv6 or Supavisor Session mode for IPv4 hosts), SSL, migrations, JSON import dry-run/apply, and Render Singapore deployment.
-- [ ] Document the cutover order: backup JSON, migrate schema, import users, verify login, deploy backend/frontend, then monitor failed reward retries.
-- [ ] Document rollback: redeploy old code without dropping new tables; note that new points are not dual-written to JSON.
-- [ ] Run `npm install` to update the lockfile after adding `pg`.
-- [ ] Run `npm test` and expect every backend/frontend test to pass.
-- [ ] Run `npm run build:frontend` and expect Vite to complete without errors.
-- [ ] Run `node --check backend/server.cjs` and all new backend modules.
-- [ ] Run `git diff --check` and expect no whitespace errors.
+- [x] Document Supabase Singapore project creation, connection-string choice (direct IPv6 or Supavisor Session mode for IPv4 hosts), SSL, migrations, JSON import dry-run/apply, and Render Singapore deployment.
+- [x] Document the cutover order: backup JSON, migrate schema, import users, verify login, deploy backend/frontend, then monitor failed reward retries.
+- [x] Document rollback: redeploy old code without dropping new tables; note that new points are not dual-written to JSON.
+- [x] Run `npm install` to update the lockfile after adding `pg`.
+- [x] Run `npm test` and expect every backend/frontend test to pass.
+- [x] Run `npm run build:frontend` and expect Vite to complete without errors.
+- [x] Run `node --check backend/server.cjs` and all new backend modules.
+- [x] Run `git diff --check` and expect no whitespace errors.
 - [ ] Start the app locally with a test PostgreSQL database and verify register, login, create room, normal collision, happy collision, reconnect, force settlement, account summary, match history, and points history.
 - [ ] Confirm with an artificial 2-second database delay that collision animation/broadcast remains immediate and balance later reconciles.
 - [ ] Confirm no item mode controls or item panels are usable, while the original implementation files and handlers remain present.
@@ -363,7 +363,7 @@ if (!ITEMS_ENABLED) {
 
 ## Completion evidence
 
-- [ ] Capture the final test/build command outputs in the task handoff.
+- [x] Capture the final test/build command outputs in the task handoff.
 - [ ] Record the migration filename and imported-user count.
 - [ ] Record one normal collision ledger row and one happy-collision ledger row from the local verification database, with credentials and personal data redacted.
 - [ ] Confirm `git status --short` contains only intentional changes.

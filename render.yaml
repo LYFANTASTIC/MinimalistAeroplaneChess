@@ -3,7 +3,8 @@ services:
     name: minimalist-aeroplane-chess
     runtime: node
     plan: free
-    buildCommand: npm install && npm run build:frontend
+    region: singapore
+    buildCommand: npm install && npm run build:frontend && npm --workspace backend run db:migrate
     startCommand: npm start
     healthCheckPath: /api/health
     envVars:
