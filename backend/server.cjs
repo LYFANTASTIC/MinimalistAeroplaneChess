@@ -5,6 +5,7 @@ const http = require('http');
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const app = express();
 const server = http.createServer(app);
@@ -12,7 +13,8 @@ const wss = new WebSocket.Server({ server });
 const ROOM_CHAT_MAX_MESSAGES = 50;
 
 // 中间件
-app.use(express.json());
+app.set('trust proxy', 1);
+app.use(express.json({ limit: '32kb' }));
 
 let bannedWordRegexes = [];
 
@@ -54,6 +56,185 @@ function sanitizeText(input) {
 
 loadBannedWords();
 
+// -------------------------- 用户与认证系统 --------------------------
+const AUTH_COOKIE_NAME = 'aeroplane_auth';
+const AUTH_SESSION_TTL = 24 * 60 * 60 * 1000;
+const AUTH_REMEMBER_TTL = 30 * 24 * 60 * 60 * 1000;
+const USER_DATA_FILE = path.resolve(process.env.USER_DATA_FILE || path.join(__dirname, 'data/users.json'));
+const authSessions = new Map();
+const authAttempts = new Map();
+const chatAttempts = new Map();
+
+function loadUserStore() {
+  try {
+    if (!fs.existsSync(USER_DATA_FILE)) {
+      return { version: 1, users: [] };
+    }
+    const data = JSON.parse(fs.readFileSync(USER_DATA_FILE, 'utf8'));
+    if (!data || !Array.isArray(data.users)) throw new Error('用户数据格式无效');
+    return data;
+  } catch (error) {
+    console.error('[账户系统] 无法读取用户数据:', error.message);
+    return { version: 1, users: [] };
+  }
+}
+
+const userStore = loadUserStore();
+
+function persistUserStore() {
+  const directory = path.dirname(USER_DATA_FILE);
+  fs.mkdirSync(directory, { recursive: true });
+  const tempFile = `${USER_DATA_FILE}.${process.pid}.tmp`;
+  fs.writeFileSync(tempFile, JSON.stringify(userStore, null, 2), { encoding: 'utf8', mode: 0o600 });
+  fs.renameSync(tempFile, USER_DATA_FILE);
+}
+
+function normalizeUsername(value) {
+  return String(value || '').trim().toLocaleLowerCase('zh-CN');
+}
+
+function normalizeEmail(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function validateUsername(username) {
+  return /^[\p{Script=Han}A-Za-z0-9_-]{2,16}$/u.test(username);
+}
+
+function validateDisplayName(displayName) {
+  return /^[\p{Script=Han}A-Za-z0-9_-]{2,16}$/u.test(displayName);
+}
+
+function validateEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email) && email.length <= 80;
+}
+
+function validatePassword(password) {
+  return typeof password === 'string'
+    && password.length >= 8
+    && password.length <= 72
+    && /[A-Za-z]/.test(password)
+    && /\d/.test(password);
+}
+
+function hashPassword(password, salt = crypto.randomBytes(16).toString('hex')) {
+  const hash = crypto.scryptSync(password, salt, 64).toString('hex');
+  return { salt, hash };
+}
+
+function verifyPassword(password, user) {
+  try {
+    const expected = Buffer.from(user.passwordHash, 'hex');
+    const actual = crypto.scryptSync(password, user.passwordSalt, 64);
+    return expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
+  } catch (error) {
+    return false;
+  }
+}
+
+function publicUser(user) {
+  return {
+    id: user.id,
+    username: user.username,
+    email: user.email,
+    displayName: user.displayName,
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt
+  };
+}
+
+function parseCookies(req) {
+  return String(req.headers.cookie || '').split(';').reduce((cookies, entry) => {
+    const separator = entry.indexOf('=');
+    if (separator === -1) return cookies;
+    const key = entry.slice(0, separator).trim();
+    const value = entry.slice(separator + 1).trim();
+    if (key) cookies[key] = decodeURIComponent(value);
+    return cookies;
+  }, {});
+}
+
+function isSecureRequest(req) {
+  return req.secure || String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim() === 'https';
+}
+
+function setAuthCookie(req, res, token, remember = false) {
+  const maxAge = remember ? `; Max-Age=${Math.floor(AUTH_REMEMBER_TTL / 1000)}` : '';
+  const secure = isSecureRequest(req) ? '; Secure' : '';
+  res.setHeader('Set-Cookie', `${AUTH_COOKIE_NAME}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax${secure}${maxAge}`);
+}
+
+function clearAuthCookie(req, res) {
+  const secure = isSecureRequest(req) ? '; Secure' : '';
+  res.setHeader('Set-Cookie', `${AUTH_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secure}`);
+}
+
+function createAuthSession(req, res, userId, remember = false) {
+  const token = crypto.randomBytes(32).toString('base64url');
+  authSessions.set(token, {
+    userId,
+    expiresAt: Date.now() + (remember ? AUTH_REMEMBER_TTL : AUTH_SESSION_TTL)
+  });
+  setAuthCookie(req, res, token, remember);
+  return token;
+}
+
+function getAuthContext(req) {
+  const token = parseCookies(req)[AUTH_COOKIE_NAME];
+  if (!token) return null;
+  const session = authSessions.get(token);
+  if (!session || session.expiresAt <= Date.now()) {
+    if (session) authSessions.delete(token);
+    return null;
+  }
+  const user = userStore.users.find(item => item.id === session.userId);
+  if (!user) {
+    authSessions.delete(token);
+    return null;
+  }
+  return { token, session, user };
+}
+
+function getAuthenticatedPlayerId(user) {
+  return `player_${String(user.id).replaceAll('-', '')}`;
+}
+
+function getAccountDisplayName(playerId) {
+  const normalizedId = String(playerId || '').replace(/^player_/, '');
+  const user = userStore.users.find(item => String(item.id).replaceAll('-', '') === normalizedId);
+  return user?.displayName || user?.username || getDefaultNickname(playerId);
+}
+
+function requireAuth(req, res, next) {
+  const auth = getAuthContext(req);
+  if (!auth) {
+    clearAuthCookie(req, res);
+    return res.status(401).json({ success: false, message: '请先登录后再继续' });
+  }
+  req.auth = auth;
+  next();
+}
+
+function revokeUserSessions(userId, exceptToken = null) {
+  for (const [token, session] of authSessions.entries()) {
+    if (session.userId === userId && token !== exceptToken) authSessions.delete(token);
+  }
+}
+
+function authRateLimit(req, res, next) {
+  const now = Date.now();
+  const windowMs = 15 * 60 * 1000;
+  const key = req.ip || req.socket.remoteAddress || 'unknown';
+  const recent = (authAttempts.get(key) || []).filter(timestamp => now - timestamp < windowMs);
+  if (recent.length >= 12) {
+    authAttempts.set(key, recent);
+    return res.status(429).json({ success: false, message: '尝试次数过多，请稍后再试' });
+  }
+  recent.push(now);
+  authAttempts.set(key, recent);
+  next();
+}
+
 // -------------------------- 工具函数（抽离通用逻辑）--------------------------
 /**
  * 生成默认昵称（统一处理，避免重复）
@@ -75,6 +256,20 @@ function getBroadcastTarget(playerId) {
   if (gameSession) return gameSession;
   // 其次查找房间
   return roomManager.getPlayerRoom(playerId) || null;
+}
+
+function canControlPlayerColor(gameSession, playerId, color) {
+  const sender = gameSession?.players?.get(playerId);
+  const controlledPlayer = Array.from(gameSession?.players?.values?.() || []).find(player => player.color === color);
+  if (!sender || !controlledPlayer) return false;
+  if (sender.color === color) return true;
+
+  const hostControlsAutomatedPlayer = gameSession.hostId === playerId && (
+    controlledPlayer.isAI
+    || controlledPlayer.isAITakeover
+    || gameSession.aiTakeoverPlayers?.has(controlledPlayer.id)
+  );
+  return !!hostControlsAutomatedPlayer;
 }
 
 // -------------------------- 房间管理类 --------------------------
@@ -199,6 +394,8 @@ class RoomManager {
         pieceCount: room.settings?.pieceCount ?? 4,
         skillMode: !!(room.settings?.skillMode),
         happyMode: !!(room.settings?.happyMode),
+        launchNumber: room.settings?.launchNumber ?? 'even',
+        teamMode: !!room.settings?.teamMode,
         playerCount: totalPlayerCount, // 包含AI玩家的总人数
         maxPlayers: 4,
         gameState: room.gameState,
@@ -272,9 +469,9 @@ class RoomManager {
   }
 
   // 创建游戏会话
-  createGameSession(gameSessionId, players, pieceCount = 4, roomCode = null, hostId = null, skillMode = false, happyMode = false) {
+  createGameSession(gameSessionId, players, pieceCount = 4, roomCode = null, hostId = null, skillMode = false, happyMode = false, launchNumber = 'even', teamMode = false, teams = []) {
     console.log(`创建游戏会话: ${gameSessionId}, 玩家数: ${players.length}, 棋子数: ${pieceCount}, 欢乐模式: ${happyMode}`);
-    const gameSession = new GameSession(gameSessionId, players, pieceCount, roomCode, hostId, skillMode, happyMode);
+    const gameSession = new GameSession(gameSessionId, players, pieceCount, roomCode, hostId, skillMode, happyMode, launchNumber, teamMode, teams);
     this.gameSessions.set(gameSessionId, gameSession);
     // 建立玩家-会话映射
     players.forEach(player => {
@@ -385,7 +582,7 @@ const dailyStats = new DailyStats();
 
 // -------------------------- 游戏会话类（逻辑保持，优化日志）--------------------------
 class GameSession {
-  constructor(gameSessionId, players, pieceCount = 4, roomCode = null, hostId = null, skillMode = false, happyMode = false) {
+  constructor(gameSessionId, players, pieceCount = 4, roomCode = null, hostId = null, skillMode = false, happyMode = false, launchNumber = 'even', teamMode = false, teams = []) {
     this.gameSessionId = gameSessionId;
     // AI玩家不需要连接状态，只有真实玩家才设置为isConnected: true
     this.players = new Map(players.map(p => [p.id, { ...p, isConnected: p.isAI ? false : true, ws: null }]));
@@ -396,6 +593,9 @@ class GameSession {
     this.hostId = hostId;
     this.skillMode = skillMode;
     this.happyMode = happyMode;
+    this.launchNumber = launchNumber;
+    this.teamMode = teamMode;
+    this.teams = teams;
     this.audioLoadedPlayers = new Set(); // 统一管理音频加载状态
     this.aiTakeoverPlayers = new Set();
     this.spectators = new Set(); // 观战者集合
@@ -413,6 +613,9 @@ class GameSession {
       energyStates: {}, // 道具模式：玩家积分状态
       pieceCount,
       happyMode, // 欢乐模式标志
+      launchNumber,
+      teamMode,
+      teams,
       // 连投奖励相关状态
       canReroll: false,
       consecutiveSixes: 0,
@@ -511,8 +714,17 @@ class Room {
     this.gameState = 'waiting';
     this.gameSessionId = null;
     this.postGameHostId = null; // 游戏结束后，首次返回房间的玩家ID（用于锁定房主）
-    this.settings = { pieceCount: 4, aiPlayers: [], skillMode: false, happyMode: false };
+    this.settings = {
+      pieceCount: 4,
+      aiPlayers: [],
+      skillMode: false,
+      happyMode: false,
+      launchNumber: 'even',
+      teamMode: false,
+      hostTeammateId: null
+    };
     this.spectators = new Set(); // 观战者ID集合
+    this.spectatorProfiles = new Map(); // spectatorId -> { id, nickname, emoji }
     this.roomChatHistory = []; // 房间聊天历史（最多50条）
     this.createdAt = Date.now(); // 房间创建时间
     this.addPlayer(hostPlayer);
@@ -523,7 +735,7 @@ class Room {
     this.emptyRoomStartTime = null; // 房间空置开始时间
   }
 
-  // 添加玩家（优化颜色分配逻辑）
+  // 添加玩家：只由服务端从空闲颜色中随机分配
   addPlayer(player) {
     // 获取已被真实玩家和AI玩家占用的颜色
     const usedColors = [
@@ -533,8 +745,7 @@ class Room {
     const availableColors = [1, 2, 3, 4].filter(c => !usedColors.includes(c));
     if (availableColors.length === 0) throw new Error('房间已满');
 
-    // 房主默认颜色1（如果可用）
-    player.color = player.isHost && availableColors.includes(1) ? 1 : availableColors[0];
+    player.color = availableColors[Math.floor(Math.random() * availableColors.length)];
     this.players.set(player.id, player);
 
     // 初始化准备状态：房主自动准备，非房主默认未准备
@@ -556,6 +767,10 @@ class Room {
     this.players.delete(playerId);
     // 清理准备状态
     this.playerReadyStatus.delete(playerId);
+
+    if (this.settings.hostTeammateId === playerId) {
+      this.settings.hostTeammateId = null;
+    }
 
     // 转移房主权限
     let newHost = this.host;
@@ -712,7 +927,38 @@ class Room {
       新设置: settings,
       房间号: this.code
     });
-    this.settings = { ...this.settings, ...settings };
+    const nextSettings = settings && typeof settings === 'object' ? settings : {};
+
+    if (Object.prototype.hasOwnProperty.call(nextSettings, 'skillMode')) {
+      this.settings.skillMode = nextSettings.skillMode === true;
+    }
+    if (Object.prototype.hasOwnProperty.call(nextSettings, 'happyMode')) {
+      this.settings.happyMode = nextSettings.happyMode === true;
+    }
+    if (Object.prototype.hasOwnProperty.call(nextSettings, 'launchNumber')) {
+      const launchNumber = nextSettings.launchNumber;
+      if (!['even', 2, 4, 6].includes(launchNumber)) {
+        throw new Error('无效的起飞点数');
+      }
+      this.settings.launchNumber = launchNumber;
+    }
+    if (Object.prototype.hasOwnProperty.call(nextSettings, 'teamMode')) {
+      const enabled = nextSettings.teamMode === true;
+      this.settings.teamMode = enabled;
+      this.settings.hostTeammateId = null;
+      if (enabled) {
+        // 2v2 只允许四名真人玩家，释放 AI 占用的席位。
+        this.settings.aiPlayers = [];
+      }
+    }
+    if (Object.prototype.hasOwnProperty.call(nextSettings, 'hostTeammateId')) {
+      const teammateId = nextSettings.hostTeammateId == null ? null : String(nextSettings.hostTeammateId);
+      if (!this.settings.teamMode) throw new Error('请先开启2v2模式');
+      if (!teammateId || teammateId === this.host.id || !this.players.has(teammateId)) {
+        throw new Error('请选择房间内的其他玩家作为队友');
+      }
+      this.settings.hostTeammateId = teammateId;
+    }
     console.log('[房间配置] 更新后的设置:', this.settings);
   }
 
@@ -775,6 +1021,11 @@ class Room {
       gameState: this.gameState,
       displayState: displayState,
       gameSession: sessionData,
+      spectators: Array.from(this.spectatorProfiles.values()).map(profile => ({
+        id: profile.id,
+        nickname: profile.nickname,
+        emoji: profile.emoji
+      })),
       playerReadyStatus: Object.fromEntries(this.playerReadyStatus),
       settings: this.settings,
       roomChatHistory: this.roomChatHistory
@@ -838,6 +1089,7 @@ function withGameSessionValidation(handler) {
 // -------------------------- 断开连接处理（优化冗余逻辑）--------------------------
 function handlePlayerDisconnect(playerId) {
   console.log(`处理玩家 ${playerId} 断开连接`);
+  chatAttempts.delete(playerId);
 
   // 清理玩家连接映射
   roomManager.playerConnections.delete(playerId);
@@ -1028,12 +1280,14 @@ function handlePlayerDisconnect(playerId) {
     const room = roomManager.getRoom(spectatingRoomCode);
     if (room) {
       room.spectators.delete(playerId);
+      room.spectatorProfiles.delete(playerId);
       if (room.gameSessionId) {
         const gameSession = roomManager.getGameSession(room.gameSessionId);
         if (gameSession) {
           gameSession.spectators.delete(playerId);
         }
       }
+      room.broadcast({ type: 'spectatorsUpdated', spectators: room.toJSON().spectators });
     }
     roomManager.playerSpectatingRooms.delete(playerId);
     return;
@@ -1136,6 +1390,20 @@ function handlePlayerDisconnect(playerId) {
 function forceDetachPlayerFromExistingContexts(playerId, nextRoomCode = null, isSilentMigration = false) {
   const currentRoomCode = roomManager.playerRooms.get(playerId);
   const currentSessionId = roomManager.playerSessions.get(playerId);
+  const currentSpectatingRoomCode = roomManager.playerSpectatingRooms.get(playerId);
+
+  if (currentSpectatingRoomCode) {
+    const spectatingRoom = roomManager.getRoom(currentSpectatingRoomCode);
+    if (spectatingRoom) {
+      spectatingRoom.spectators.delete(playerId);
+      spectatingRoom.spectatorProfiles.delete(playerId);
+      if (spectatingRoom.gameSessionId) {
+        roomManager.getGameSession(spectatingRoom.gameSessionId)?.spectators.delete(playerId);
+      }
+      spectatingRoom.broadcast({ type: 'spectatorsUpdated', spectators: spectatingRoom.toJSON().spectators });
+    }
+    roomManager.playerSpectatingRooms.delete(playerId);
+  }
 
   if (currentRoomCode && nextRoomCode && currentRoomCode === nextRoomCode) {
     return;
@@ -1227,16 +1495,30 @@ function forceDetachPlayerFromExistingContexts(playerId, nextRoomCode = null, is
   }
 }
 
-wss.on('connection', (ws) => {
+wss.on('connection', (ws, req) => {
+  const connectionAuth = getAuthContext(req);
+  if (!connectionAuth) {
+    ws.send(JSON.stringify({ type: 'authRequired', message: '请先登录后再进入联机模式' }));
+    ws.close(4401, 'Authentication required');
+    return;
+  }
+
+  ws.authUser = connectionAuth.user;
   let playerId = null;
 
   ws.on('message', (data) => {
     try {
+      if (connectionAuth.session.expiresAt <= Date.now() || !authSessions.has(connectionAuth.token)) {
+        ws.send(JSON.stringify({ type: 'authRequired', message: '登录状态已失效，请重新登录' }));
+        ws.close(4401, 'Session expired');
+        return;
+      }
+
       const message = JSON.parse(data);
 
       // 初始化玩家ID
       if (!playerId) {
-        playerId = message.playerId?.startsWith('player_') ? message.playerId : generatePlayerId();
+        playerId = getAuthenticatedPlayerId(connectionAuth.user);
         console.log(`玩家 ${playerId} 连接`);
         // 发送连接确认
         ws.send(JSON.stringify({ type: 'connected', playerId }));
@@ -1722,7 +2004,7 @@ function handleCreateRoom(ws, playerId, message) {
   forceDetachPlayerFromExistingContexts(playerId, null, true);
 
   const emoji = message.data?.emoji || message.emoji;
-  const player = new Player(playerId, ws, message.data?.nickname, emoji);
+  const player = new Player(playerId, ws, getAccountDisplayName(playerId), emoji);
   const room = roomManager.createRoom(player);
   ws.send(JSON.stringify({ type: 'roomCreated', room: room.toJSON() }));
 
@@ -1775,13 +2057,7 @@ function handleJoinRoom(ws, playerId, message) {
     roomManager.setPlayerConnection(playerId, ws);
 
     // 只有客户端显式传了 nickname/emoji 才更新（避免用 undefined/空值覆盖）
-    if (message.data && Object.prototype.hasOwnProperty.call(message.data, 'nickname')) {
-      const nicknameStr = (message.data.nickname == null ? '' : String(message.data.nickname));
-      const trimmed = nicknameStr.trim();
-      if (trimmed) {
-        existingPlayer.nickname = trimmed;
-      }
-    }
+    existingPlayer.nickname = getAccountDisplayName(playerId);
     if (message.data && Object.prototype.hasOwnProperty.call(message.data, 'emoji')) {
       if (message.data.emoji != null) {
         existingPlayer.emoji = message.data.emoji;
@@ -1829,7 +2105,7 @@ function handleJoinRoom(ws, playerId, message) {
   // 再次确保没有任何残留上下文（针对可能存在的残留 Session）
   forceDetachPlayerFromExistingContexts(playerId, roomCode, true);
 
-  const player = new Player(playerId, ws, message.data?.nickname, message.data?.emoji);
+  const player = new Player(playerId, ws, getAccountDisplayName(playerId), message.data?.emoji);
   roomManager.joinRoom(roomCode, player);
 
   // 发送加入成功消息
@@ -1863,6 +2139,20 @@ function handleSpectateRoom(ws, playerId, message) {
     return;
   }
 
+  const previousSpectatingRoomCode = roomManager.playerSpectatingRooms.get(playerId);
+  if (previousSpectatingRoomCode && previousSpectatingRoomCode !== roomCode) {
+    const previousRoom = roomManager.getRoom(previousSpectatingRoomCode);
+    if (previousRoom) {
+      previousRoom.spectators.delete(playerId);
+      previousRoom.spectatorProfiles.delete(playerId);
+      if (previousRoom.gameSessionId) {
+        roomManager.getGameSession(previousRoom.gameSessionId)?.spectators.delete(playerId);
+      }
+      previousRoom.broadcast({ type: 'spectatorsUpdated', spectators: previousRoom.toJSON().spectators });
+    }
+    roomManager.playerSpectatingRooms.delete(playerId);
+  }
+
   // 如果观战者本身就是游戏中的玩家，转为重连而非观战
   if (room.gameSessionId) {
     const gameSession = roomManager.getGameSession(room.gameSessionId);
@@ -1889,14 +2179,23 @@ function handleSpectateRoom(ws, playerId, message) {
 
   // 正常观战者
   const MAX_SPECTATORS = 5;
-  if (room.spectators.size >= MAX_SPECTATORS) {
+  if (!room.spectators.has(playerId) && room.spectators.size >= MAX_SPECTATORS) {
     ws.send(JSON.stringify({ type: 'error', message: '观战人数已满' }));
     return;
   }
 
+  const requestedNickname = sanitizeText(message.data?.nickname || message.nickname || '').trim().slice(0, 12);
+  const requestedEmoji = sanitizeText(message.data?.emoji || message.emoji || '👀').trim().slice(0, 4);
+  const spectatorProfile = {
+    id: playerId,
+    nickname: requestedNickname || `观战者_${playerId.slice(-4)}`,
+    emoji: requestedEmoji || '👀'
+  };
+
   roomManager.setPlayerConnection(playerId, ws);
   roomManager.playerSpectatingRooms.set(playerId, roomCode);
   room.spectators.add(playerId);
+  room.spectatorProfiles.set(playerId, spectatorProfile);
 
   if (room.gameSessionId) {
     const gameSession = roomManager.getGameSession(room.gameSessionId);
@@ -1916,43 +2215,22 @@ function handleSpectateRoom(ws, playerId, message) {
     }
   }
   ws.send(JSON.stringify(response));
+  room.broadcast({ type: 'spectatorsUpdated', spectators: room.toJSON().spectators });
   console.log(`玩家 ${playerId} 开始观战房间 ${roomCode}`);
 }
 
 // 选择颜色（使用中间件）
 const handleSelectColor = withRoomValidation((ws, playerId, message, room, player) => {
-  const colorIndex = message.data.colorIndex;
-  // 检查真实玩家和AI玩家占用的颜色
-  const usedColors = [
-    ...Array.from(room.players.values()).filter(p => p.id !== playerId).map(p => p.color),
-    ...room.settings.aiPlayers.map(ai => ai.color)
-  ];
-  if (!usedColors.includes(colorIndex)) {
-    player.color = colorIndex;
-    // 广播更新
-    room.broadcast({
-      type: 'playerUpdated',
-      player: { id: player.id, nickname: player.nickname, color: player.color, emoji: player.emoji },
-      room: room.toJSON()
-    });
-  } else {
-    // 发送错误消息给客户端
-    ws.send(JSON.stringify({
-      type: 'error',
-      message: '该颜色已被占用'
-    }));
-  }
+  ws.send(JSON.stringify({
+    type: 'error',
+    message: '玩家颜色由系统随机分配'
+  }));
 });
 
 // 更新昵称（不使用房间验证中间件，允许玩家在房间外更新）
 function handleUpdateNickname(ws, playerId, message) {
   try {
-    const nickname = message.data?.nickname || message.nickname;
-    const manualInput = message.data?.manualInput === true || message.manualInput === true;
-    // 确保nickname是字符串，如果为null/undefined则设置为空字符串
-    const nicknameStr = (nickname == null ? '' : String(nickname));
-    const nextNickname = manualInput ? sanitizeText(nicknameStr) : nicknameStr;
-    const newNickname = nextNickname.trim() || getDefaultNickname(playerId);
+    const newNickname = getAccountDisplayName(playerId);
 
     // 先尝试在游戏会话中查找玩家
     const gameSession = roomManager.getPlayerGameSession(playerId);
@@ -2140,12 +2418,14 @@ function handleLeaveRoom(ws, playerId, message = {}, isSilentMigration = false) 
     const room = roomManager.getRoom(spectatingRoomCode);
     if (room) {
       room.spectators.delete(playerId);
+      room.spectatorProfiles.delete(playerId);
       if (room.gameSessionId) {
         const gameSession = roomManager.getGameSession(room.gameSessionId);
         if (gameSession) {
           gameSession.spectators.delete(playerId);
         }
       }
+      room.broadcast({ type: 'spectatorsUpdated', spectators: room.toJSON().spectators });
     }
     roomManager.playerSpectatingRooms.delete(playerId);
     return;
@@ -2398,16 +2678,8 @@ function handleUpdatePlayer(ws, playerId, message) {
   if (!player) throw new Error('玩家不存在');
 
   // 更新玩家信息
-  if (message.nickname !== undefined) {
-    // 确保nickname是字符串，如果为null/undefined则设置为空字符串
-    const nicknameStr = (message.nickname == null ? '' : String(message.nickname));
-    player.nickname = nicknameStr.trim() || getDefaultNickname(playerId);
-  }
   if (message.emoji !== undefined) {
     player.emoji = message.emoji;
-  }
-  if (message.color !== undefined) {
-    player.color = message.color;
   }
 
   // 广播更新
@@ -2459,8 +2731,23 @@ function handleToggleReady(ws, playerId, message) {
 function handleStartGame(ws, playerId) {
   const room = roomManager.getPlayerRoom(playerId);
   if (!room) throw new Error('玩家不在任何房间中');
+  if (room.host.id !== playerId) throw new Error('只有房主可以开始游戏');
   if (room.gameState === 'playing') throw new Error('游戏已经开始');
-  if (room.players.size < 2) throw new Error('至少需要2名玩家才能开始游戏');
+  const onlineRealPlayers = Array.from(room.players.values()).filter(player => player.isConnected !== false);
+  if (room.settings.teamMode) {
+    if (room.players.size !== 4 || onlineRealPlayers.length !== 4 || room.settings.aiPlayers.length > 0) {
+      throw new Error('2v2模式必须有4名在线真人玩家');
+    }
+    const teammateId = room.settings.hostTeammateId;
+    if (!teammateId || teammateId === room.host.id || !room.players.has(teammateId)) {
+      throw new Error('请先选择你的队友');
+    }
+  } else if (onlineRealPlayers.length < 2) {
+    throw new Error('至少需要2名在线玩家才能开始游戏');
+  }
+  if (onlineRealPlayers.length !== room.players.size) {
+    throw new Error('请等待所有玩家重新连接');
+  }
 
   // 开始新一局时，清除结算返回房主锁定
   room.postGameHostId = null;
@@ -2514,6 +2801,12 @@ function handleStartGame(ws, playerId) {
     isHost: false  // AI玩家不是房主
   }));
   const allPlayers = [...realPlayers, ...aiPlayers];
+  const teams = room.settings.teamMode
+    ? [
+        [room.host.id, room.settings.hostTeammateId],
+        realPlayers.map(player => player.id).filter(id => id !== room.host.id && id !== room.settings.hostTeammateId)
+      ].map(team => team.map(id => realPlayers.find(player => player.id === id)?.color).filter(Boolean))
+    : [];
 
   // 创建游戏会话
   const hostPlayer = realPlayers.find(p => p.isHost);
@@ -2524,7 +2817,10 @@ function handleStartGame(ws, playerId) {
     room.code,
     hostPlayer ? hostPlayer.id : null,
     room.settings.skillMode,
-    room.settings.happyMode
+    room.settings.happyMode,
+    room.settings.launchNumber,
+    room.settings.teamMode,
+    teams
   );
 
   // 继承房间内的观战者
@@ -2569,6 +2865,9 @@ function handleStartGame(ws, playerId) {
     pieceCount: room.settings.pieceCount,
     skillMode: room.settings.skillMode || false,
     happyMode: room.settings.happyMode || false,
+    launchNumber: room.settings.launchNumber || 'even',
+    teamMode: room.settings.teamMode || false,
+    teams,
     room: room.toJSON()
   });
 
@@ -2578,6 +2877,7 @@ function handleStartGame(ws, playerId) {
 
 // 添加AI玩家（需要房主权限）
 const handleAddAIPlayer = withRoomValidation((ws, playerId, message, room) => {
+  if (room.settings.teamMode) throw new Error('2v2模式不支持AI玩家');
   const { colorIndex, difficulty } = message.data;
   const usedColors = [...Array.from(room.players.values()).map(p => p.color), ...room.settings.aiPlayers.map(ai => ai.color)];
   if (usedColors.includes(colorIndex)) throw new Error('该颜色已被占用');
@@ -2708,6 +3008,11 @@ function handleDiceRoll(ws, playerId, message) {
 
   // 更新游戏状态（仅游戏会话）
   if (gameSession && gameSession.gameData) {
+    if (!canControlPlayerColor(gameSession, playerId, message.player)) {
+      ws.send(JSON.stringify({ type: 'error', message: '当前账号不能操作这个玩家' }));
+      return;
+    }
+
     // 防串号：只允许当前回合玩家掷骰。客户端不同步时忽略非法掷骰，避免污染连投计数。
     if (message.player !== undefined && gameSession.gameData.currentPlayer != null && message.player !== gameSession.gameData.currentPlayer) {
       console.warn(`[diceRoll] 忽略非当前玩家掷骰: msg.player=${message.player}, currentPlayer=${gameSession.gameData.currentPlayer}, playerId=${playerId}`);
@@ -3022,6 +3327,11 @@ function handleDiceAnimationStart(ws, playerId, message) {
   if (message.diceValue !== undefined && message.diceValue !== null) {
     const gameSession = roomManager.getPlayerGameSession(playerId);
     if (gameSession && gameSession.gameData) {
+      if (!canControlPlayerColor(gameSession, playerId, message.triggerPlayerNumber)) {
+        ws.send(JSON.stringify({ type: 'error', message: '当前账号不能操作这个玩家' }));
+        return;
+      }
+
       // 防串号：只允许当前回合玩家掷骰
       if (gameSession.gameData.currentPlayer != null && message.triggerPlayerNumber !== undefined && message.triggerPlayerNumber !== gameSession.gameData.currentPlayer) {
         console.warn(`[diceAnimationStart] 忽略非当前玩家掷骰: msg.triggerPlayerNumber=${message.triggerPlayerNumber}, currentPlayer=${gameSession.gameData.currentPlayer}`);
@@ -4420,30 +4730,57 @@ function handleForceSettlement(ws, playerId, message) {
 
 // 处理聊天消息
 function handleChatMessage(ws, playerId, message) {
-  const target = getBroadcastTarget(playerId);
-  if (!target) throw new Error('玩家不在任何房间或游戏会话中');
+  let target = getBroadcastTarget(playerId);
+  let player = target?.players?.get(playerId) || null;
+  let spectatorProfile = null;
 
-  // 获取玩家信息
-  const player = target.players.get(playerId);
-  if (!player) throw new Error('找不到玩家信息');
+  if (!target || !player) {
+    const spectatingRoomCode = roomManager.playerSpectatingRooms.get(playerId);
+    const room = spectatingRoomCode ? roomManager.getRoom(spectatingRoomCode) : null;
+    if (room && room.spectators.has(playerId)) {
+      target = room.gameSessionId ? roomManager.getGameSession(room.gameSessionId) || room : room;
+      spectatorProfile = room.spectatorProfiles.get(playerId) || {
+        id: playerId,
+        nickname: `观战者_${playerId.slice(-4)}`,
+        emoji: '👀'
+      };
+    }
+  }
+
+  if (!target || (!player && !spectatorProfile)) {
+    throw new Error('用户不在任何房间、游戏会话或观战席中');
+  }
+
+  const now = Date.now();
+  const recentAttempts = (chatAttempts.get(playerId) || []).filter(timestamp => now - timestamp < 10000);
+  if (recentAttempts.length >= 6) {
+    ws.send(JSON.stringify({ type: 'error', message: '发言太快了，请稍后再试' }));
+    chatAttempts.set(playerId, recentAttempts);
+    return;
+  }
+  recentAttempts.push(now);
+  chatAttempts.set(playerId, recentAttempts);
 
   const rawMessage = message?.data?.message ?? message?.message ?? '';
-  const sanitizedMessage = sanitizeText(rawMessage);
+  const sanitizedMessage = sanitizeText(rawMessage).trim().slice(0, 40);
   if (!String(sanitizedMessage).trim()) {
     return;
   }
 
+  const isSpectator = !!spectatorProfile;
+
   const chatPayload = {
     type: 'chatMessage',
     playerId,
-    playerNumber: player.color, // 统一用color（1-4）
-    playerName: sanitizeText(player.nickname),
+    playerNumber: isSpectator ? 'spectator' : player.color,
+    playerName: sanitizeText(isSpectator ? spectatorProfile.nickname : player.nickname),
     message: sanitizedMessage,
+    isSpectator,
     timestamp: message?.data?.timestamp || message?.timestamp || Date.now()
   };
 
   // 在房间阶段写入房间聊天历史（保留最近50条）
-  if (target instanceof Room) {
+  if (target instanceof Room && !isSpectator) {
     target.appendRoomChatMessage({
       playerId: chatPayload.playerId,
       playerNumber: chatPayload.playerNumber,
@@ -4494,10 +4831,155 @@ function generatePlayerId() {
 }
 
 /**
+ * 注册账号
+ * POST /api/auth/register
+ */
+app.post('/api/auth/register', authRateLimit, (req, res) => {
+  try {
+    const username = String(req.body?.username || '').trim();
+    const usernameKey = normalizeUsername(username);
+    const email = normalizeEmail(req.body?.email);
+    const password = req.body?.password;
+
+    if (!validateUsername(username)) {
+      return res.status(400).json({ success: false, message: '用户名需为 2–16 位中文、字母、数字、下划线或短横线' });
+    }
+    if (!validateEmail(email)) {
+      return res.status(400).json({ success: false, message: '请输入有效的邮箱地址' });
+    }
+    if (!validatePassword(password)) {
+      return res.status(400).json({ success: false, message: '密码至少 8 位，并同时包含字母和数字' });
+    }
+    if (userStore.users.some(user => user.usernameKey === usernameKey)) {
+      return res.status(409).json({ success: false, message: '这个用户名已经被使用' });
+    }
+    if (userStore.users.some(user => user.email === email)) {
+      return res.status(409).json({ success: false, message: '这个邮箱已经注册过账号' });
+    }
+
+    const passwordData = hashPassword(password);
+    const now = new Date().toISOString();
+    const user = {
+      id: crypto.randomUUID(),
+      username,
+      usernameKey,
+      email,
+      displayName: sanitizeText(username),
+      passwordSalt: passwordData.salt,
+      passwordHash: passwordData.hash,
+      createdAt: now,
+      updatedAt: now
+    };
+    userStore.users.push(user);
+    persistUserStore();
+    createAuthSession(req, res, user.id, true);
+
+    res.status(201).json({ success: true, user: publicUser(user) });
+  } catch (error) {
+    console.error('[账户系统] 注册失败:', error);
+    res.status(500).json({ success: false, message: '注册暂时不可用，请稍后重试' });
+  }
+});
+
+/**
+ * 登录账号
+ * POST /api/auth/login
+ */
+app.post('/api/auth/login', authRateLimit, (req, res) => {
+  try {
+    const identifier = String(req.body?.identifier || '').trim();
+    const password = req.body?.password;
+    const identifierKey = normalizeUsername(identifier);
+    const emailKey = normalizeEmail(identifier);
+    const user = userStore.users.find(item => item.usernameKey === identifierKey || item.email === emailKey);
+
+    if (!user || typeof password !== 'string' || !verifyPassword(password, user)) {
+      return res.status(401).json({ success: false, message: '账号或密码不正确' });
+    }
+
+    createAuthSession(req, res, user.id, req.body?.remember === true);
+    res.json({ success: true, user: publicUser(user) });
+  } catch (error) {
+    console.error('[账户系统] 登录失败:', error);
+    res.status(500).json({ success: false, message: '登录暂时不可用，请稍后重试' });
+  }
+});
+
+/**
+ * 获取当前登录用户
+ * GET /api/auth/me
+ */
+app.get('/api/auth/me', requireAuth, (req, res) => {
+  res.json({ success: true, user: publicUser(req.auth.user) });
+});
+
+/**
+ * 退出登录
+ * POST /api/auth/logout
+ */
+app.post('/api/auth/logout', (req, res) => {
+  const auth = getAuthContext(req);
+  if (auth) authSessions.delete(auth.token);
+  clearAuthCookie(req, res);
+  res.json({ success: true });
+});
+
+/**
+ * 更新个人资料
+ * PUT /api/auth/profile
+ */
+app.put('/api/auth/profile', requireAuth, (req, res) => {
+  try {
+    const displayName = String(req.body?.displayName || '').trim();
+    if (!validateDisplayName(displayName)) {
+      return res.status(400).json({ success: false, message: '昵称需为 2–16 位中文、字母、数字、下划线或短横线' });
+    }
+    req.auth.user.displayName = sanitizeText(displayName);
+    req.auth.user.updatedAt = new Date().toISOString();
+    persistUserStore();
+    res.json({ success: true, user: publicUser(req.auth.user) });
+  } catch (error) {
+    console.error('[账户系统] 更新资料失败:', error);
+    res.status(500).json({ success: false, message: '资料保存失败，请稍后重试' });
+  }
+});
+
+/**
+ * 修改密码
+ * PUT /api/auth/password
+ */
+app.put('/api/auth/password', authRateLimit, requireAuth, (req, res) => {
+  try {
+    const currentPassword = req.body?.currentPassword;
+    const newPassword = req.body?.newPassword;
+    if (!verifyPassword(currentPassword, req.auth.user)) {
+      return res.status(400).json({ success: false, message: '当前密码不正确' });
+    }
+    if (!validatePassword(newPassword)) {
+      return res.status(400).json({ success: false, message: '新密码至少 8 位，并同时包含字母和数字' });
+    }
+    if (currentPassword === newPassword) {
+      return res.status(400).json({ success: false, message: '新密码不能与当前密码相同' });
+    }
+
+    const passwordData = hashPassword(newPassword);
+    req.auth.user.passwordSalt = passwordData.salt;
+    req.auth.user.passwordHash = passwordData.hash;
+    req.auth.user.updatedAt = new Date().toISOString();
+    persistUserStore();
+    revokeUserSessions(req.auth.user.id, req.auth.token);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('[账户系统] 修改密码失败:', error);
+    res.status(500).json({ success: false, message: '密码更新失败，请稍后重试' });
+  }
+});
+
+/**
  * 查询所有房间信息
  * GET /api/rooms
  */
-app.get('/api/rooms', (req, res) => {
+app.get('/api/rooms', requireAuth, (req, res) => {
   try {
     const roomsInfo = Array.from(roomManager.rooms.values()).map(room => room.toJSON());
 
@@ -4520,7 +5002,7 @@ app.get('/api/rooms', (req, res) => {
  * 查询所有游戏会话信息
  * GET /api/sessions
  */
-app.get('/api/sessions', (req, res) => {
+app.get('/api/sessions', requireAuth, (req, res) => {
   try {
     const sessionsInfo = [];
 
@@ -4572,7 +5054,7 @@ app.get('/api/sessions', (req, res) => {
  * 获取在线用户列表及其详细状态
  * GET /api/online-users
  */
-app.get('/api/online-users', (req, res) => {
+app.get('/api/online-users', requireAuth, (req, res) => {
   try {
     const users = [];
 
@@ -4642,7 +5124,7 @@ app.get('/api/online-users', (req, res) => {
  * 查询每日统计
  * GET /api/daily-stats
  */
-app.get('/api/daily-stats', (req, res) => {
+app.get('/api/daily-stats', requireAuth, (req, res) => {
   res.json(dailyStats.toJSON());
 });
 
@@ -4650,7 +5132,7 @@ app.get('/api/daily-stats', (req, res) => {
  * 查询服务器统计信息
  * GET /api/stats
  */
-app.get('/api/stats', (req, res) => {
+app.get('/api/stats', requireAuth, (req, res) => {
   try {
     const stats = {
       rooms: {
@@ -4735,7 +5217,7 @@ app.get('/api/stats', (req, res) => {
  * 手动清理孤立资源
  * POST /api/cleanup
  */
-app.post('/api/cleanup', (req, res) => {
+app.post('/api/cleanup', requireAuth, (req, res) => {
   try {
     const result = cleanupOrphanedResources();
 
@@ -4901,7 +5383,38 @@ function handleBoardSyncData(ws, playerId, message) {
 }
 
 // -------------------------- 静态文件服务 --------------------------
-app.use(express.static('.'));
+app.get('/api/health', (req, res) => {
+  res.json({ success: true, timestamp: new Date().toISOString() });
+});
+
+const frontendSourceDirectory = path.resolve(__dirname, '../frontend');
+const frontendBuildDirectory = path.resolve(frontendSourceDirectory, 'dist');
+const frontendDirectory = fs.existsSync(path.join(frontendBuildDirectory, 'index.html'))
+  ? frontendBuildDirectory
+  : frontendSourceDirectory;
+
+const protectedPagePaths = new Set([
+  '/', '/index.html', '/game', '/game.html', '/spectate', '/spectate.html',
+  '/admin', '/admin.html', '/frontend', '/frontend/', '/frontend/index.html',
+  '/frontend/game.html', '/frontend/spectate.html', '/frontend/admin.html'
+]);
+
+app.use((req, res, next) => {
+  if (req.method !== 'GET' || !protectedPagePaths.has(req.path)) return next();
+  if (getAuthContext(req)) return next();
+  const returnTo = req.originalUrl.startsWith('/') && !req.originalUrl.startsWith('//') ? req.originalUrl : '/';
+  res.redirect(302, `/account?reason=login-required&returnTo=${encodeURIComponent(returnTo)}`);
+});
+
+// 兼容旧的 /frontend/*.html 地址，同时让生产环境可直接使用 /account、/game 等短地址。
+app.use('/frontend', express.static(frontendDirectory));
+app.use(express.static(frontendDirectory));
+
+for (const page of ['account', 'game', 'admin', 'spectate']) {
+  app.get(`/${page}`, (req, res) => {
+    res.sendFile(path.join(frontendDirectory, `${page}.html`));
+  });
+}
 
 // -------------------------- 定时清理任务 --------------------------
 /**
@@ -4924,7 +5437,7 @@ function startAutoCleanup() {
 
 // -------------------------- 启动服务器 --------------------------
 const PORT = process.env.PORT || 3001;
-server.listen(PORT, () => {
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`服务器运行在 http://localhost:${PORT}`);
   console.log(`WebSocket服务器运行在 ws://localhost:${PORT}`);
   console.log(`\n管理面板: http://localhost:${PORT}/frontend/admin.html`);
@@ -4933,6 +5446,7 @@ server.listen(PORT, () => {
   console.log(`  - 游戏会话: http://localhost:${PORT}/api/sessions`);
   console.log(`  - 服务器统计: http://localhost:${PORT}/api/stats`);
   console.log(`  - 手动清理: http://localhost:${PORT}/api/cleanup (POST)`);
+  console.log(`  - 健康检查: http://localhost:${PORT}/api/health`);
 
   // 启动自动清理任务
   startAutoCleanup();

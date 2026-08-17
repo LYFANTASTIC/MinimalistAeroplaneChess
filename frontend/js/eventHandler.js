@@ -1100,6 +1100,13 @@ class EventHandler {
             });
         }
 
+        document.querySelectorAll('.quick-message-btn').forEach(button => {
+            button.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.handleQuickMessage(button.dataset.quickMessage || '');
+            });
+        });
+
         // Emoji按钮点击事件
         const emojiBtn = document.getElementById('emojiBtn');
         if (emojiBtn) {
@@ -1360,20 +1367,42 @@ class EventHandler {
     handleEmojiClick(emoji) {
         console.log('发送emoji:', emoji);
 
-        // 获取当前玩家编号
-        const currentPlayer = window.gameState ? window.gameState.getCurrentPlayer() : 1;
-
-        // 发送emoji消息到联机服务器
-        if (window.multiplayerGameManager && window.multiplayerGameManager.isConnected) {
-            window.multiplayerGameManager.sendMessage('chatMessage', {
-                message: emoji,
-                playerNumber: currentPlayer,
-                timestamp: Date.now()
-            });
-        }
+        this.sendChatMessage(emoji);
 
         // 隐藏emoji面板
         this.hideEmojiPanel();
+    }
+
+    handleQuickMessage(message) {
+        if (!message) return;
+        this.sendChatMessage(message);
+        this.hideEmojiPanel();
+        this.hideChatInput();
+    }
+
+    sendChatMessage(message) {
+        const currentPlayer = window.gameState ? window.gameState.getCurrentPlayer() : 1;
+
+        if (window.multiplayerGameManager && window.multiplayerGameManager.isConnected) {
+            window.multiplayerGameManager.sendMessage('chatMessage', {
+                message,
+                playerNumber: currentPlayer,
+                timestamp: Date.now()
+            });
+            return true;
+        }
+
+        if (window.multiplayerManager?.wsClient?.isConnected) {
+            window.multiplayerManager.wsClient.send(JSON.stringify({
+                type: 'chatMessage',
+                message,
+                playerNumber: currentPlayer,
+                timestamp: Date.now()
+            }));
+            return true;
+        }
+
+        return false;
     }
 
     // 隐藏emoji面板
@@ -1393,28 +1422,12 @@ class EventHandler {
                 const sanitizedMessage = await sanitizeUserText(message);
                 console.log('发送聊天消息:', sanitizedMessage);
 
-                // 获取当前玩家编号
                 const currentPlayer = window.gameState ? window.gameState.getCurrentPlayer() : 1;
 
                 // 发送消息到后端（联机模式）
-                if (window.multiplayerGameManager && window.multiplayerGameManager.isConnected) {
-                    // 游戏中的联机模式
-                    window.multiplayerGameManager.sendMessage('chatMessage', {
-                        message: sanitizedMessage,
-                        playerNumber: currentPlayer,
-                        timestamp: Date.now()
-                    });
-                } else if (window.multiplayerManager && window.multiplayerManager.wsClient && window.multiplayerManager.wsClient.isConnected) {
-                    // 房间中的联机模式
-                    window.multiplayerManager.wsClient.send(JSON.stringify({
-                        type: 'chatMessage',
-                        message: sanitizedMessage,
-                        playerNumber: currentPlayer,
-                        timestamp: Date.now()
-                    }));
-                } else {
+                if (!this.sendChatMessage(sanitizedMessage)) {
                     // 单机模式，直接显示消息
-                    this.showChatMessage(message, currentPlayer);
+                    this.showChatMessage(sanitizedMessage, currentPlayer);
 
                     // 同时添加到游戏信息
                     if (window.gameInfo) {
@@ -1435,67 +1448,62 @@ class EventHandler {
     }
 
     // 显示聊天消息
-    showChatMessage(message, playerNumber = null, playerName = null, isSystemMessage = false) {
+    showChatMessage(message, playerNumber = null, playerName = null, isSystemMessage = false, isSpectator = false) {
         const chatMessageDisplay = document.getElementById('chatMessageDisplay');
         const chatMessageContent = document.getElementById('chatMessageContent');
 
         if (!chatMessageDisplay || !chatMessageContent) return;
 
-        // 如果有正在显示的消息，立即清除timeout和动画状态
-        if (this.chatMessageTimeout) {
-            clearTimeout(this.chatMessageTimeout);
-            this.chatMessageTimeout = null;
-        }
+        const activeItems = chatMessageContent.querySelectorAll('.chat-barrage-item');
+        if (activeItems.length >= 6) activeItems[0].remove();
 
-        // 确保移除所有动画相关的类
-        chatMessageDisplay.classList.remove('fade-out');
+        this.chatBarrageSequence = (this.chatBarrageSequence || 0) + 1;
+        const barrageItem = document.createElement('div');
+        barrageItem.className = 'chat-barrage-item';
+        const barrageLane = (this.chatBarrageSequence - 1) % 6;
+        barrageItem.style.top = `${8 + barrageLane * 9}vh`;
 
-        // 暂时隐藏元素以强制重新渲染，确保动画状态完全重置
-        chatMessageDisplay.style.display = 'none';
+        const cheerColor = {
+            '红方加油': 'red',
+            '绿方加油': 'green',
+            '蓝方加油': 'blue',
+            '橙方加油': 'orange'
+        }[String(message).trim()];
+        if (cheerColor) barrageItem.classList.add(`cheer-${cheerColor}`);
 
-        // 格式化消息内容
-        let formattedMessage;
         if (isSystemMessage) {
-            // 系统消息：使用特殊样式，不显示玩家编号
-            formattedMessage = `<span class="system-message-text">${message}</span>`;
-        } else if (playerNumber) {
-            // 优先使用服务器传递的playerName，否则使用本地playerNameManager
-            const displayName = playerName ||
-                (window.playerNameManager ? window.playerNameManager.getPlayerName(playerNumber) : `玩家${playerNumber}`);
-
-            // 创建带有玩家颜色的格式化消息
-            const playerSpan = `<span class="player-text player-${playerNumber}">${displayName}</span>`;
-            const colonSpan = `<span class="action-text">: </span>`;
-            const messageSpan = `<span class="chat-message-text">${message}</span>`;
-            formattedMessage = `${playerSpan}${colonSpan}${messageSpan}`;
+            const systemText = document.createElement('span');
+            systemText.className = 'system-message-text';
+            systemText.textContent = String(message);
+            barrageItem.appendChild(systemText);
         } else {
-            // 如果没有指定玩家编号，直接显示消息
-            formattedMessage = `<span class="chat-message-text">${message}</span>`;
+            const spectator = isSpectator || playerNumber === 'spectator';
+            const displayName = playerName || (spectator
+                ? '观战者'
+                : (window.playerNameManager ? window.playerNameManager.getPlayerName(playerNumber) : `玩家${playerNumber}`));
+            const playerText = document.createElement('span');
+            playerText.className = `player-text ${spectator ? 'player-spectator' : `player-${playerNumber}`}`;
+            playerText.textContent = displayName;
+            const actionText = document.createElement('span');
+            actionText.className = 'action-text';
+            actionText.textContent = ': ';
+            const messageText = document.createElement('span');
+            messageText.className = 'chat-message-text';
+            messageText.textContent = String(message);
+            barrageItem.append(playerText, actionText, messageText);
         }
 
-        // 设置消息内容
-        chatMessageContent.innerHTML = formattedMessage;
+        const removeItem = () => {
+            barrageItem.remove();
+            if (!chatMessageContent.querySelector('.chat-barrage-item')) {
+                chatMessageDisplay.style.display = 'none';
+            }
+        };
+        barrageItem.addEventListener('animationend', removeItem, { once: true });
+        setTimeout(removeItem, 7500);
 
-        // 使用requestAnimationFrame确保DOM更新后再显示，避免动画状态继承
-        requestAnimationFrame(() => {
-            // 重置宽度为auto让CSS自然处理
-            chatMessageContent.style.width = 'auto';
-
-            // 显示消息
-            chatMessageDisplay.style.display = 'block';
-
-            // 10秒后开始淡出动画
-            this.chatMessageTimeout = setTimeout(() => {
-                chatMessageDisplay.classList.add('fade-out');
-
-                // 动画完成后隐藏元素
-                setTimeout(() => {
-                    chatMessageDisplay.style.display = 'none';
-                    chatMessageDisplay.classList.remove('fade-out');
-                    this.chatMessageTimeout = null;
-                }, 300); // 与CSS动画时间匹配
-            }, 10000);
-        });
+        chatMessageContent.appendChild(barrageItem);
+        chatMessageDisplay.style.display = 'block';
     }
 
     // 动态调整聊天消息容器宽度以刚好包裹文字
@@ -1539,14 +1547,11 @@ class EventHandler {
     hideChatMessage() {
         const chatMessageDisplay = document.getElementById('chatMessageDisplay');
 
-        if (this.chatMessageTimeout) {
-            clearTimeout(this.chatMessageTimeout);
-            this.chatMessageTimeout = null;
-        }
-
         if (chatMessageDisplay) {
             chatMessageDisplay.style.display = 'none';
             chatMessageDisplay.classList.remove('fade-out');
+            const chatMessageContent = document.getElementById('chatMessageContent');
+            if (chatMessageContent) chatMessageContent.replaceChildren();
         }
     }
 

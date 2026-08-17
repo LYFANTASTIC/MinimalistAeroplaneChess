@@ -5,6 +5,7 @@
 import { reconnectManager } from './reconnectManager.js';
 import { activePlayerManager } from './activePlayerManager.js';
 import { playerIdManager } from './playerIdManager.js';
+import { handleAuthenticationExpired } from './authGuard.js';
 
 // 声明全局变量，这些变量在游戏运行时会被设置
 let gameState, uiUpdater, gameInfo;
@@ -633,9 +634,14 @@ class MultiplayerGameManager {
                     }
                 };
 
-                this.wsClient.onclose = () => {
+                this.wsClient.onclose = (event) => {
                     console.log('游戏内WebSocket连接已关闭');
                     this.isConnected = false;
+                    if (event.code === 4401) {
+                        this.disableReconnect = true;
+                        handleAuthenticationExpired();
+                        return;
+                    }
                     if (!this.disableReconnect) {
                         this._didDisconnectOnce = true;
                         this.attemptReconnect();
@@ -662,7 +668,9 @@ class MultiplayerGameManager {
         if (this.isSpectator) {
             if (this.isConnected && this.roomCode) {
                 this.sendMessage('spectate_room', {
-                    roomCode: this.roomCode
+                    roomCode: this.roomCode,
+                    nickname: playerIdManager.getSavedNickname() || `观战者_${String(this.playerId).slice(-4)}`,
+                    emoji: '👀'
                 });
             }
             return;
@@ -714,7 +722,7 @@ class MultiplayerGameManager {
      * 发送消息
      */
     sendMessage(type, data = {}) {
-        if (this.isSpectator && !['spectate_room', 'rejoinRoom', 'audioLoaded'].includes(type)) {
+        if (this.isSpectator && !['spectate_room', 'rejoinRoom', 'audioLoaded', 'chatMessage'].includes(type)) {
             console.warn('[sendMessage] 观战模式，跳过消息发送:', type);
             return;
         }
@@ -843,7 +851,13 @@ class MultiplayerGameManager {
 
         switch (data.type) {
             case 'connected':
-                // 处理连接确认消息，通常不需要特殊处理
+                if (data.playerId) {
+                    this.playerId = playerIdManager.setPlayerId(data.playerId);
+                }
+                break;
+            case 'authRequired':
+                this.disableReconnect = true;
+                handleAuthenticationExpired();
                 break;
             case 'diceRoll':
                 this.handleDiceRolled(data);
@@ -984,7 +998,7 @@ class MultiplayerGameManager {
                 // 调用eventHandler的showChatMessage方法显示消息
                 // 传递服务器提供的playerName而不是依赖本地playerNameManager
                 if (window.eventHandler) {
-                    window.eventHandler.showChatMessage(data.message, data.playerNumber, data.playerName, data.isSystemMessage);
+                    window.eventHandler.showChatMessage(data.message, data.playerNumber, data.playerName, data.isSystemMessage, data.isSpectator);
                 } else {
                     console.warn('eventHandler 不存在，无法显示聊天消息');
                 }
@@ -1216,6 +1230,12 @@ class MultiplayerGameManager {
         if (gameData.happyMode !== undefined) {
             gameState.setHappyMode(gameData.happyMode);
         }
+        if (gameData.launchNumber !== undefined) {
+            gameState.setLaunchNumber(gameData.launchNumber);
+        }
+        if (gameData.teamMode !== undefined || gameData.teams !== undefined) {
+            gameState.setTeamMode(gameData.teamMode === true, gameData.teams || []);
+        }
 
         // 确保currentPlayer已设置（最终检查）
         if (!gameState.getCurrentPlayer()) {
@@ -1310,7 +1330,7 @@ class MultiplayerGameManager {
                 let hasMovableChess = false;
                 const serverChess = gameData.playerChess?.[currentPlayer];
                 if (serverChess && Array.isArray(serverChess)) {
-                    const canLaunch = gameData.diceValue % 2 === 0;
+                    const canLaunch = gameState.canLaunch(gameData.diceValue);
                     hasMovableChess = serverChess.some(c => {
                         if (c.finished) return false;
                         const pos = c.position;
@@ -1322,7 +1342,7 @@ class MultiplayerGameManager {
                 } else {
                     // 降级：使用本地gameState的棋子数据
                     const playerChess = gameState.getPlayerChess();
-                    const canLaunch = gameData.diceValue % 2 === 0;
+                    const canLaunch = gameState.canLaunch(gameData.diceValue);
                     hasMovableChess = playerChess[currentPlayer].some(chess => {
                         if (chess.finished) return false;
                         if (chess.position === -1) return canLaunch;

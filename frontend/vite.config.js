@@ -5,6 +5,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: 'index.html',
+        account: 'account.html',
         game: 'game.html',
         admin: 'admin.html',
         spectate: 'spectate.html'
@@ -29,6 +30,9 @@ export default defineConfig({
         }
         else if (url === '/game') {
           req.url = '/game.html';
+        }
+        else if (url === '/account') {
+          req.url = '/account.html';
         }
         else if (url === '/admin') {
           req.url = '/admin.html';

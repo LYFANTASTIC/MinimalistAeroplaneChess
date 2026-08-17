@@ -28,3 +28,9 @@ docs/poster/
 
 # Local content moderation dictionary
 frontend/assets/违规词库.txt
+
+# Local account data (set USER_DATA_FILE to a persistent disk path in production)
+backend/data/
+
+# Local-only visual experiments
+frontend/design-previews/

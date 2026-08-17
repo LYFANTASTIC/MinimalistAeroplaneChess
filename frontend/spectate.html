@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" class="auth-pending">
 
 <head>
     <meta charset="UTF-8">
@@ -7,6 +7,7 @@
     <title>观战 - 极简飞行棋</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="stylesheet" href="css/style.css">
+    <style>.auth-pending body { visibility: hidden; }</style>
 </head>
 
 <body>
@@ -385,7 +386,7 @@
                 <!-- 左侧聊天图标 -->
                 <div class="game-controls-left">
                     <div class="chat-btn" id="chatBtn">
-                        <svg class="chat-icon" id="chatBtn" t="1759842009068" viewBox="0 0 1024 1024" version="1.1"
+                        <svg class="chat-icon" id="chatBtnIcon" t="1759842009068" viewBox="0 0 1024 1024" version="1.1"
                             xmlns="http://www.w3.org/2000/svg" p-id="7092">
                             <path
                                 d="M512 981.33H85.34c-15.85 0-30.38-8.77-37.77-22.81a42.624 42.624 0 0 1 2.6-44.02L135 791.08C75.25 710.5 42.67 612.6 42.67 512 42.67 253.21 253.21 42.67 512 42.67S981.34 253.21 981.34 512 770.8 981.33 512 981.33zM166.44 896H512c211.73 0 384-172.27 384-384S723.73 128 512 128 128 300.27 128 512c0 91.29 32.83 179.9 92.46 249.46 12.58 14.69 13.73 36 2.77 51.94L166.44 896z"
@@ -416,6 +417,12 @@
 
                     <!-- 聊天输入区域 -->
                     <div id="chatInputArea" class="chat-input-area">
+                        <div class="quick-message-list" aria-label="快捷消息">
+                            <button type="button" class="quick-message-btn quick-red" data-quick-message="红方加油">红方加油</button>
+                            <button type="button" class="quick-message-btn quick-green" data-quick-message="绿方加油">绿方加油</button>
+                            <button type="button" class="quick-message-btn quick-blue" data-quick-message="蓝方加油">蓝方加油</button>
+                            <button type="button" class="quick-message-btn quick-orange" data-quick-message="橙方加油">橙方加油</button>
+                        </div>
                         <div class="chat-input-container">
                             <!-- Emoji按钮 -->
                             <div class="emoji-btn" id="emojiBtn">
@@ -813,7 +820,7 @@
                                 <div class="mechanism-item launch-item">
                                     <h5><span class="move-type-launch">起飞</span></h5>
                                     <div class="sub-content-item launch-sub-item">
-                                        <p>初始棋子在基地，摇到偶数可让1颗棋子<span class="move-type-launch">[起飞]</span>至起飞点。
+                                        <p>初始棋子在基地，摇到本局设置的起飞点数可让1颗棋子<span class="move-type-launch">[起飞]</span>至起飞点。
                                         </p>
                                     </div>
                                 </div>
@@ -937,7 +944,7 @@
     <!-- AI托管遮罩层 -->
     <div id="ai-takeover-overlay" class="ai-takeover-overlay"></div>
 
-    <script type="module" src="./js/spectateMain.js"></script>
+    <script type="module" src="./js/spectateEntry.js"></script>
 </body>
 
 </html>

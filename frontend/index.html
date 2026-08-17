@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" class="auth-pending">
 
 <head>
     <meta charset="UTF-8">
@@ -10,10 +10,24 @@
     <title>极简飞行棋</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="stylesheet" href="css/style.css">
+    <style>.auth-pending body { visibility: hidden; }</style>
 </head>
 
 <body>
     <div class="index-container">
+        <div class="index-account-bar">
+            <a class="index-account-link" id="indexAccountLink" href="/account" aria-label="登录或进入用户中心">
+                <span class="index-account-avatar" id="indexAccountAvatar" aria-hidden="true">
+                    <svg viewBox="0 0 24 24"><path d="M20 21a8 8 0 0 0-16 0M12 13a5 5 0 1 0 0-10 5 5 0 0 0 0 10Z"></path></svg>
+                </span>
+                <span class="index-account-copy">
+                    <small id="indexAccountHint">保存你的玩家身份</small>
+                    <strong id="indexAccountName">登录 / 注册</strong>
+                </span>
+                <span class="index-account-arrow" aria-hidden="true">→</span>
+            </a>
+        </div>
+
         <!-- 标题区域 -->
         <div class="index-title">
             <h1 class="rainbow-title">
@@ -40,7 +54,8 @@
                     </div>
                     <span class="menu-btn-text">在线联机</span>
                 </button>
-                <button class="menu-card-btn" id="menuAiBtn">
+                <button class="menu-card-btn is-temporarily-disabled" id="menuAiBtn" type="button" disabled
+                    aria-disabled="true" aria-describedby="menuAiStatus">
                     <div class="menu-btn-icon" id="iconAi">
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                             <path
@@ -53,8 +68,10 @@
 
                     </div>
                     <span class="menu-btn-text">人机对战</span>
+                    <span class="menu-status-badge" id="menuAiStatus">暂未开放</span>
                 </button>
-                <button class="menu-card-btn" id="menuLocalBtn">
+                <button class="menu-card-btn is-temporarily-disabled" id="menuLocalBtn" type="button" disabled
+                    aria-disabled="true" aria-describedby="menuLocalStatus">
                     <div class="menu-btn-icon">
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                             stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -65,6 +82,7 @@
                         </svg>
                     </div>
                     <span class="menu-btn-text">本地多人</span>
+                    <span class="menu-status-badge" id="menuLocalStatus">暂未开放</span>
                 </button>
                 <button class="menu-card-btn" id="menuRulesBtn">
                     <div class="menu-btn-icon">
@@ -278,9 +296,9 @@
                                         </div>
 
 
-                                        <!-- 玩家颜色选择区域 -->
-                                        <div class="color-selection">
-                                            <h4>选择你的颜色</h4>
+                                        <!-- 玩家颜色由服务端随机分配 -->
+                                        <div class="color-selection random-color-selection">
+                                            <h4>颜色随机分配</h4>
                                             <div class="color-options">
                                                 <div class="color-option" data-player="1">
                                                     <div class="color-circle player-1-color">
@@ -315,6 +333,7 @@
                                                         style="display: none;"></div>
                                                 </div>
                                             </div>
+                                            <div class="hint-text">进入房间时自动获得一种空闲颜色</div>
                                         </div>
 
                                         <!-- 当前玩家设置 -->
@@ -384,6 +403,16 @@
                                                 </div>
                                             </div>
 
+                                            <div class="launch-number-setting">
+                                                <h4>起飞点数</h4>
+                                                <div class="compact-choice-options" id="launchNumberOptions">
+                                                    <button class="compact-choice-option selected" type="button" data-launch="even">偶数</button>
+                                                    <button class="compact-choice-option" type="button" data-launch="2">2</button>
+                                                    <button class="compact-choice-option" type="button" data-launch="4">4</button>
+                                                    <button class="compact-choice-option" type="button" data-launch="6">6</button>
+                                                </div>
+                                            </div>
+
                                             <!-- AI玩家设置 -->
                                             <div class="bot-players-preview">
                                                 <h4>AI玩家</h4>
@@ -415,7 +444,20 @@
                                                             <span class="toggle-slider"></span>
                                                         </label>
                                                     </div>
+                                                    <div class="toggle-option">
+                                                        <span class="toggle-label-text">2v2组队</span>
+                                                        <label class="toggle-switch">
+                                                            <input type="checkbox" id="teamModeCheckbox">
+                                                            <span class="toggle-slider"></span>
+                                                        </label>
+                                                    </div>
                                                 </div>
+                                            </div>
+
+                                            <div class="teammate-setting" id="teammateSetting" style="display: none;">
+                                                <h4>选择你的队友</h4>
+                                                <div class="teammate-options" id="teammateOptions"></div>
+                                                <div class="hint-text">4名真人玩家全部在线并准备后才能开始</div>
                                             </div>
 
                                             <!-- 开始游戏按钮 -->
@@ -799,14 +841,8 @@
         </div>
 
         <div class="index-footer">
-            <div class="footer-feedback">Bug反馈QQ群：<span class="qq-group-number">1097294452</span></div>
-            <div class="footer-copyright">© 2026 极简飞行棋 Made with <a href="/admin" class="heart" target="_blank"><svg
-                        t="1777825177386" class="icon" viewBox="0 0 1024 1024" version="1.1"
-                        xmlns="http://www.w3.org/2000/svg" p-id="6361" width="14" height="14">
-                        <path
-                            d="M95.2 600.8l361.4 337.4c15 14 34.8 21.8 55.4 21.8s40.4-7.8 55.4-21.8l361.4-337.4c60.8-56.6 95.2-136 95.2-219v-11.6c0-139.8-101-259-238.8-282-91.2-15.2-184 14.6-249.2 79.8l-24 24-24-24c-65.2-65.2-158-95-249.2-79.8C101 111.2 0 230.4 0 370.2v11.6c0 83 34.4 162.4 95.2 219z"
-                            p-id="6362" fill="#f2687b"></path>
-                    </svg></a> by <a href="https://github.com/ZTMYO/MinimalistAeroplaneChess" target="_blank">@ZTMYO</a></div>
+            <div class="footer-feedback">Bug反馈加V：<span class="qq-group-number">MJLS-0625</span></div>
+            <div class="footer-copyright">© 2026 极简飞行棋 Copied with <a href="/admin" class="heart" target="_blank">💗</a> by @Jasper</div>
         </div>
     </div>
 
@@ -844,7 +880,7 @@
         </div>
     </div>
 
-    <script type="module" src="./js/indexMain.js"></script>
+    <script type="module" src="./js/indexEntry.js"></script>
     <script>
         function showModeRulesModal() {
             document.getElementById('modeRulesModal').style.display = 'flex';

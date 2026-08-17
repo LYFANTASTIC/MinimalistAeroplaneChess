@@ -97,7 +97,7 @@ class ChessPiece {
             return; // 不是最顶层棋子，不能选择
         }
 
-        const canLaunch = this.gameState.diceValue % 2 === 0;
+        const canLaunch = this.gameState.canLaunch(this.gameState.diceValue);
 
         if (chess.position === -1) {
             // 棋子在起始区域，只有偶数才能出发
@@ -1315,7 +1315,7 @@ class ChessPiece {
      * 检查胜利条件
      */
     checkWinner() {
-        return this.gameState.playerChess[this.gameState.currentPlayer].every(chess => chess.finished);
+        return this.gameState.checkPlayerWin(this.gameState.currentPlayer);
     }
 
     /**
@@ -1459,7 +1459,7 @@ class ChessPiece {
 
         // 如果棋子在起始区域（position === -1），只有偶数才能出发
         if (chess.position === -1) {
-            return diceValue % 2 === 0;
+            return this.gameState.canLaunch(diceValue);
         }
 
         // 棋子在轨道上，检查是否可以移动

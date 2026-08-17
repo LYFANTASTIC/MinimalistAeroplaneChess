@@ -31,6 +31,9 @@ class GameState {
         this.isInChessAnimation = false; // 是否在棋子动画中（防止bringToFront破坏动画）
         this.isThreeSixesPenaltyActive = false; // 三次6惩罚是否正在执行中
         this.happyMode = false; // 欢乐模式标志
+        this.launchNumber = 'even'; // 起飞点数：even 或 2/4/6
+        this.teamMode = false;
+        this.teams = [];
 
         // 棋子数量配置
         this.pieceCount = 4; // 默认每个玩家4个棋子
@@ -455,9 +458,9 @@ class GameState {
             // 如果棋子已完成，跳过
             if (chess.finished) continue;
 
-            // 如果棋子在起始区域，只有摇到6才能出发
+            // 如果棋子在起始区域，使用房主设置的起飞点数
             if (chess.position === -1) {
-                if (diceValue === 6) {
+                if (this.canLaunch(diceValue)) {
                     movableChess.push(i);
                 }
             }
@@ -468,12 +471,12 @@ class GameState {
 
     // 检查玩家是否获胜
     checkPlayerWin(player) {
-        for (let i = 0; i < this.pieceCount; i++) {
-            if (!this.playerChess[player][i].finished) {
-                return false;
-            }
-        }
-        return true;
+        const playerFinished = this.playerChess[player].every(chess => chess.finished);
+        if (!playerFinished || !this.teamMode) return playerFinished;
+
+        const team = this.teams.find(teamColors => Array.isArray(teamColors) && teamColors.includes(player));
+        if (!team || team.length !== 2) return false;
+        return team.every(color => this.playerChess[color]?.every(chess => chess.finished));
     }
 
     // 检查玩家是否只剩一颗未完成的棋子
@@ -736,6 +739,23 @@ class GameState {
     // 设置欢乐模式状态
     setHappyMode(enabled) {
         this.happyMode = enabled === true;
+    }
+
+    setLaunchNumber(value) {
+        this.launchNumber = ['even', 2, 4, 6].includes(value) ? value : 'even';
+    }
+
+    canLaunch(diceValue) {
+        return this.launchNumber === 'even'
+            ? Number(diceValue) % 2 === 0
+            : Number(diceValue) === Number(this.launchNumber);
+    }
+
+    setTeamMode(enabled, teams = []) {
+        this.teamMode = enabled === true;
+        this.teams = this.teamMode && Array.isArray(teams)
+            ? teams.filter(team => Array.isArray(team) && team.length === 2).map(team => team.map(Number))
+            : [];
     }
 
     // 获取玩家棋子数据

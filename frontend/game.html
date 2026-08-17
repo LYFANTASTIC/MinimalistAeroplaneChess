@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" class="auth-pending">
 
 <head>
     <meta charset="UTF-8">
@@ -7,6 +7,7 @@
     <title>极简飞行棋</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="stylesheet" href="css/style.css">
+    <style>.auth-pending body { visibility: hidden; }</style>
 </head>
 
 <body class="game-page">
@@ -423,6 +424,12 @@
 
                     <!-- 聊天输入区域 -->
                     <div id="chatInputArea" class="chat-input-area">
+                        <div class="quick-message-list" aria-label="快捷消息">
+                            <button type="button" class="quick-message-btn quick-red" data-quick-message="红方加油">红方加油</button>
+                            <button type="button" class="quick-message-btn quick-green" data-quick-message="绿方加油">绿方加油</button>
+                            <button type="button" class="quick-message-btn quick-blue" data-quick-message="蓝方加油">蓝方加油</button>
+                            <button type="button" class="quick-message-btn quick-orange" data-quick-message="橙方加油">橙方加油</button>
+                        </div>
                         <div class="chat-input-container">
                             <!-- Emoji按钮 -->
                             <div class="emoji-btn" id="emojiBtn">
@@ -831,7 +838,7 @@
                                 <div class="mechanism-item launch-item">
                                     <h5><span class="move-type-launch">起飞</span></h5>
                                     <div class="sub-content-item launch-sub-item">
-                                        <p>初始棋子在基地，摇到偶数可让1颗棋子<span class="move-type-launch">[起飞]</span>至起飞点。
+                                        <p>初始棋子在基地，摇到本局设置的起飞点数可让1颗棋子<span class="move-type-launch">[起飞]</span>至起飞点。
                                         </p>
                                     </div>
                                 </div>
@@ -955,7 +962,7 @@
     <!-- AI托管遮罩层 -->
     <div id="ai-takeover-overlay" class="ai-takeover-overlay"></div>
 
-    <script type="module" src="./js/gameMain.js"></script>
+    <script type="module" src="./js/gameEntry.js"></script>
 </body>
 
 </html>

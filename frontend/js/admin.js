@@ -3,6 +3,7 @@
  */
 
 import '../css/admin.css';
+import { handleAuthenticationExpired } from './authGuard.js';
 
 class AdminPanel {
     constructor() {
@@ -47,6 +48,16 @@ class AdminPanel {
         }
     }
 
+    async authenticatedFetch(url, options = {}) {
+        const response = await fetch(url, { credentials: 'same-origin', ...options });
+        if (response.status === 401) {
+            this.stopAutoRefresh();
+            handleAuthenticationExpired();
+            throw new Error('登录状态已失效');
+        }
+        return response;
+    }
+
     async fetchAllData() {
         try {
             // 获取统计、房间、在线用户和每日数据
@@ -72,7 +83,7 @@ class AdminPanel {
     }
 
     async fetchStats() {
-        const response = await fetch(`${this.apiBaseUrl}/api/stats`);
+        const response = await this.authenticatedFetch(`${this.apiBaseUrl}/api/stats`);
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
@@ -82,7 +93,7 @@ class AdminPanel {
 
     async fetchRooms() {
         const url = `${this.apiBaseUrl}/api/rooms`;
-        const response = await fetch(url);
+        const response = await this.authenticatedFetch(url);
 
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -94,7 +105,7 @@ class AdminPanel {
 
     async fetchOnlineUsers() {
         const url = `${this.apiBaseUrl}/api/online-users`;
-        const response = await fetch(url);
+        const response = await this.authenticatedFetch(url);
 
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -336,7 +347,7 @@ class AdminPanel {
 
     async fetchDailyStats() {
         const url = `${this.apiBaseUrl}/api/daily-stats`;
-        const response = await fetch(url);
+        const response = await this.authenticatedFetch(url);
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
@@ -357,4 +368,3 @@ class AdminPanel {
 document.addEventListener('DOMContentLoaded', () => {
     new AdminPanel();
 });
-

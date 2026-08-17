@@ -184,7 +184,31 @@ class GameInfo {
         if (!isSkipList) {
             const messageElement = document.createElement('div');
             messageElement.className = 'info-message';
-            messageElement.innerHTML = this.formatMessage(messageData);
+            if (isChatMessage) {
+                const chatPlayer = messageData.player;
+                const chatData = messageData.data || {};
+                if (chatPlayer === null || chatPlayer === undefined) {
+                    const systemText = document.createElement('span');
+                    systemText.className = 'system-message-text';
+                    systemText.textContent = String(chatData.message || '');
+                    messageElement.appendChild(systemText);
+                } else {
+                    const isSpectator = chatPlayer === 'spectator';
+                    const displayName = chatData.playerName || (isSpectator ? '观战者' : this.getPlayerName(chatPlayer));
+                    const playerText = document.createElement('span');
+                    playerText.className = `player-text ${isSpectator ? 'player-spectator' : `player-${chatPlayer}`}`;
+                    playerText.textContent = displayName;
+                    const actionText = document.createElement('span');
+                    actionText.className = 'action-text';
+                    actionText.textContent = ': ';
+                    const chatText = document.createElement('span');
+                    chatText.className = 'chat-message-text';
+                    chatText.textContent = String(chatData.message || '');
+                    messageElement.append(playerText, actionText, chatText);
+                }
+            } else {
+                messageElement.innerHTML = this.formatMessage(messageData);
+            }
             // 添加新消息到容器底部
             targetContainer.appendChild(messageElement);
 

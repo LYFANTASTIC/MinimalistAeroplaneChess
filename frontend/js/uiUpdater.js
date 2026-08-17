@@ -265,7 +265,7 @@ class UIUpdater {
         const currentPlayer = gameState.getCurrentPlayer();
         const diceValue = gameState.getDiceValue();
 
-        if (gamePhase === 'selecting' && diceValue === 6) {
+        if (gamePhase === 'selecting' && gameState.canLaunch(diceValue)) {
             const startArea = document.getElementById(`player${currentPlayer}-start`);
             if (startArea) {
                 startArea.classList.add('start-area-active');
@@ -380,7 +380,7 @@ class UIUpdater {
 
         // 如果棋子在起始区域（position === -1），只有偶数才能出发
         if (chess.position === -1) {
-            return diceValue % 2 === 0;
+            return gameState.canLaunch(diceValue);
         }
 
         // 棋子在轨道上，检查是否可以移动

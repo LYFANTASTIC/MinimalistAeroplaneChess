@@ -147,10 +147,10 @@ class FlyingChessGame {
         const skillBtn = document.getElementById('skillBtn');
         if (skillBtn) skillBtn.style.display = 'none';
         const chatBtn = document.getElementById('chatBtn');
-        if (chatBtn) chatBtn.style.display = 'none';
+        if (chatBtn) chatBtn.style.display = 'flex';
         // 设置所有按钮的disabled状态（保留游戏规则、音效开关、结算弹框按钮可点击）
         document.querySelectorAll('button').forEach(btn => {
-            if (btn.id !== 'returnHome' && btn.id !== 'panelSwitchBtn' && btn.id !== 'showRules' && btn.id !== 'toggleAudio' && btn.id !== 'rules-close' && btn.id !== 'settlement-close' && btn.id !== 'new-game-btn' && btn.id !== 'data-analysis-btn') {
+            if (btn.id !== 'returnHome' && btn.id !== 'panelSwitchBtn' && btn.id !== 'showRules' && btn.id !== 'toggleAudio' && btn.id !== 'rules-close' && btn.id !== 'settlement-close' && btn.id !== 'new-game-btn' && btn.id !== 'data-analysis-btn' && !btn.classList.contains('quick-message-btn')) {
                 btn.disabled = true;
             }
         });
@@ -756,7 +756,7 @@ class FlyingChessGame {
 
             playerChess[currentPlayer].forEach((chess, index) => {
                 // 简化的可移动性检查
-                if (chess.position === 'start' && diceValue === 6) {
+                if (chess.position === 'start' && gameState.canLaunch(diceValue)) {
                     movableChess.push({ player: currentPlayer, chessIndex: index });
                 } else if (chess.position !== 'start' && chess.position !== 'finish') {
                     movableChess.push({ player: currentPlayer, chessIndex: index });

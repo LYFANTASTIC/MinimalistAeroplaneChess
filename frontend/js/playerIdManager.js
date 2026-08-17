@@ -51,6 +51,22 @@ class PlayerIdManager {
     }
 
     /**
+     * 采用服务器根据登录账户签发的稳定玩家ID
+     * @param {string} playerId - 服务器返回的玩家ID
+     */
+    setPlayerId(playerId) {
+        const normalizedId = String(playerId || '').trim();
+        if (!normalizedId.startsWith('player_')) return this.playerId;
+        this.playerId = normalizedId;
+        try {
+            localStorage.setItem('aeroplaneChess_playerId', normalizedId);
+        } catch (error) {
+            // 本地存储不可用时，本次页面会话仍然使用服务器身份。
+        }
+        return this.playerId;
+    }
+
+    /**
      * 重新生成玩家ID（用于重置身份）
      * @returns {string} 新的玩家ID
      */

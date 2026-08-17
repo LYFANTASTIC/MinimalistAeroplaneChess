@@ -1,4 +1,5 @@
 import { playerIdManager } from './playerIdManager.js';
+import { handleAuthenticationExpired } from './authGuard.js';
 
 /**
  * WebSocket客户端管理类
@@ -22,6 +23,7 @@ export class WebSocketClient {
         this.lastPongTime = Date.now(); // 上次收到pong的时间
         this.visibilityChangeHandler = null; // 页面可见性变化处理器
         this.isReconnecting = false; // 是否正在重连中
+        this.disableReconnect = false;
 
         // 服务器地址配置 - 根据当前环境动态设置
         // 如果是https，使用wss；如果是http，使用ws
@@ -189,8 +191,8 @@ export class WebSocketClient {
      * 加入观战
      * @param {string} roomCode - 房间号
      */
-    spectateRoom(roomCode) {
-        this.sendMessage('spectate_room', { roomCode });
+    spectateRoom(roomCode, nickname = '', emoji = '👀') {
+        this.sendMessage('spectate_room', { roomCode, nickname, emoji });
     }
 
     /**
@@ -323,6 +325,16 @@ export class WebSocketClient {
         try {
             const message = JSON.parse(event.data);
 
+            if (message.type === 'authRequired') {
+                this.disableReconnect = true;
+                handleAuthenticationExpired();
+                return;
+            }
+
+            if (message.type === 'connected' && message.playerId) {
+                this.playerId = playerIdManager.setPlayerId(message.playerId);
+            }
+
             // 处理心跳pong消息
             if (message.type === 'pong') {
                 this.handlePong();
@@ -362,7 +374,12 @@ export class WebSocketClient {
         }
 
         // 只有在非正常关闭且重连次数未超限时才重连
-        if (event.code !== 1000 && event.code !== 1001 && this.reconnectAttempts < this.maxReconnectAttempts) {
+        if (event.code === 4401) {
+            handleAuthenticationExpired();
+            return;
+        }
+
+        if (!this.disableReconnect && event.code !== 1000 && event.code !== 1001 && this.reconnectAttempts < this.maxReconnectAttempts) {
             // 添加延迟避免立即重连
             setTimeout(() => {
                 if (!this.isConnected) {

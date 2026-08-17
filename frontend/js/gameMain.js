@@ -385,6 +385,8 @@ class FlyingChessGame {
                 if (multiplayerGameData.happyMode !== undefined) {
                     gameState.setHappyMode(multiplayerGameData.happyMode);
                 }
+                gameState.setLaunchNumber(multiplayerGameData.launchNumber ?? 'even');
+                gameState.setTeamMode(multiplayerGameData.teamMode === true, multiplayerGameData.teams || []);
 
                 // 设置在线多人模式标志
                 gameState.setIsOnlineMultiplayer(true);
@@ -1120,7 +1122,7 @@ class FlyingChessGame {
 
             playerChess[currentPlayer].forEach((chess, index) => {
                 // 简化的可移动性检查
-                if (chess.position === 'start' && diceValue === 6) {
+                if (chess.position === 'start' && gameState.canLaunch(diceValue)) {
                     movableChess.push({ player: currentPlayer, chessIndex: index });
                 } else if (chess.position !== 'start' && chess.position !== 'finish') {
                     movableChess.push({ player: currentPlayer, chessIndex: index });

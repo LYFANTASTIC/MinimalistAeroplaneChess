@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#f5f2ed">
+    <title>用户中心 · 极简飞行棋</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/account.css">
+</head>
+
+<body class="account-page">
+    <main class="account-shell">
+        <a class="account-back" href="./index.html" aria-label="返回游戏首页">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M19 12H5M12 19l-7-7 7-7"></path>
+            </svg>
+            <span>返回首页</span>
+        </a>
+
+        <section class="account-brand" aria-labelledby="accountBrandTitle">
+            <div class="account-plane" aria-hidden="true">
+                <span class="plane-dot dot-mint"></span>
+                <span class="plane-dot dot-peach"></span>
+                <span class="plane-dot dot-blue"></span>
+                <span class="plane-dot dot-coral"></span>
+                <svg viewBox="0 0 1024 1024">
+                    <path d="M599.06048 831.309824l12.106752-193.404928 372.860928 184.430592V710.206464L617.906176 367.33952V151.638016c0-56.974336-46.188544-143.064064-103.158784-143.064064-56.974336 0-103.158784 86.089728-103.158784 143.064064V367.33952L45.461504 710.206464v112.129024l366.660608-184.430592 14.999552 209.27488c0 5.05344.594944 9.892864 1.124352 14.749696l-66.591744 60.348416v66.587648l153.986048-50.879488 2.43712-.80896 147.439616 51.688448v-66.587648l-68.758528-62.253056 2.902016-28.915712Z"></path>
+                </svg>
+            </div>
+            <div>
+                <p class="account-eyebrow">欢迎来到</p>
+                <h1 id="accountBrandTitle" class="account-logo" aria-label="极简飞行棋">
+                    <span>极</span><span>简</span><span>飞</span><span>行</span><span>棋</span>
+                </h1>
+                <p class="account-intro">一个账号，记录属于你的每一次起飞。</p>
+            </div>
+            <div class="account-feature-list" aria-label="账户功能">
+                <div><span class="feature-index mint">01</span><span>保留你的玩家身份</span></div>
+                <div><span class="feature-index blue">02</span><span>同步昵称与个人资料</span></div>
+                <div><span class="feature-index peach">03</span><span>为战绩与成就做好准备</span></div>
+            </div>
+        </section>
+
+        <section class="account-card" id="authView" aria-labelledby="authTitle">
+            <div class="auth-tabs" role="tablist" aria-label="账户操作">
+                <button class="auth-tab is-active" id="loginTab" type="button" role="tab" aria-selected="true"
+                    aria-controls="loginForm">登录</button>
+                <button class="auth-tab" id="registerTab" type="button" role="tab" aria-selected="false"
+                    aria-controls="registerForm">注册</button>
+            </div>
+
+            <div class="auth-heading">
+                <p class="auth-kicker" id="authKicker">继续你的飞行旅程</p>
+                <h2 id="authTitle">欢迎回来</h2>
+            </div>
+
+            <div class="form-message" id="authMessage" role="status" aria-live="polite"></div>
+
+            <form id="loginForm" class="account-form" novalidate>
+                <label class="field-group">
+                    <span>账号</span>
+                    <span class="field-control">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 21a8 8 0 0 0-16 0M12 13a5 5 0 1 0 0-10 5 5 0 0 0 0 10Z"></path></svg>
+                        <input id="loginIdentifier" name="identifier" type="text" autocomplete="username"
+                            placeholder="用户名或邮箱" maxlength="80" required>
+                    </span>
+                </label>
+                <label class="field-group">
+                    <span>密码</span>
+                    <span class="field-control">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 10V8a6 6 0 0 1 12 0v2M5 10h14v11H5V10Z"></path></svg>
+                        <input id="loginPassword" name="password" type="password" autocomplete="current-password"
+                            placeholder="输入密码" maxlength="72" required>
+                        <button class="password-toggle" type="button" data-target="loginPassword" aria-label="显示密码">显示</button>
+                    </span>
+                </label>
+                <label class="remember-option">
+                    <input id="rememberMe" name="remember" type="checkbox">
+                    <span>保持登录</span>
+                </label>
+                <button class="account-primary-btn" type="submit">
+                    <span>登录</span><span aria-hidden="true">→</span>
+                </button>
+                <p class="auth-switch-copy">还没有账号？<button type="button" data-switch-tab="register">免费注册</button></p>
+            </form>
+
+            <form id="registerForm" class="account-form" hidden novalidate>
+                <label class="field-group">
+                    <span>用户名</span>
+                    <span class="field-control">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 21a8 8 0 0 0-16 0M12 13a5 5 0 1 0 0-10 5 5 0 0 0 0 10Z"></path></svg>
+                        <input id="registerUsername" name="username" type="text" autocomplete="username"
+                            placeholder="2–16 位中文、字母或数字" maxlength="16" required>
+                    </span>
+                </label>
+                <label class="field-group">
+                    <span>邮箱</span>
+                    <span class="field-control">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h18v14H3V5Zm1 1 8 7 8-7"></path></svg>
+                        <input id="registerEmail" name="email" type="email" autocomplete="email"
+                            placeholder="用于登录和找回账号" maxlength="80" required>
+                    </span>
+                </label>
+                <label class="field-group">
+                    <span>密码</span>
+                    <span class="field-control">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 10V8a6 6 0 0 1 12 0v2M5 10h14v11H5V10Z"></path></svg>
+                        <input id="registerPassword" name="password" type="password" autocomplete="new-password"
+                            placeholder="至少 8 位，包含字母和数字" maxlength="72" required>
+                        <button class="password-toggle" type="button" data-target="registerPassword" aria-label="显示密码">显示</button>
+                    </span>
+                    <span class="password-meter" aria-hidden="true"><i></i><i></i><i></i></span>
+                    <small id="passwordHint">建议使用字母、数字和符号组合</small>
+                </label>
+                <label class="field-group">
+                    <span>确认密码</span>
+                    <span class="field-control">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 12 4 4 8-9"></path></svg>
+                        <input id="registerConfirmPassword" name="confirmPassword" type="password"
+                            autocomplete="new-password" placeholder="再次输入密码" maxlength="72" required>
+                    </span>
+                </label>
+                <label class="agreement-option">
+                    <input id="registerAgreement" name="agreement" type="checkbox" required>
+                    <span>我已了解账号仅用于本游戏的身份与数据服务</span>
+                </label>
+                <button class="account-primary-btn" type="submit">
+                    <span>创建账号</span><span aria-hidden="true">→</span>
+                </button>
+                <p class="auth-switch-copy">已有账号？<button type="button" data-switch-tab="login">直接登录</button></p>
+            </form>
+        </section>
+
+        <section class="account-card profile-card" id="profileView" aria-labelledby="profileTitle" hidden>
+            <div class="profile-topline">
+                <span class="status-pill"><i></i>已登录</span>
+                <button class="quiet-button" id="logoutButton" type="button">退出登录</button>
+            </div>
+            <div class="profile-identity">
+                <div class="profile-avatar" id="profileAvatar" aria-hidden="true">飞</div>
+                <div>
+                    <p>玩家档案</p>
+                    <h2 id="profileTitle">你好，<span id="profileDisplayName">玩家</span></h2>
+                    <span class="profile-username" id="profileUsername">@player</span>
+                </div>
+            </div>
+
+            <dl class="profile-facts">
+                <div><dt>邮箱</dt><dd id="profileEmail">—</dd></div>
+                <div><dt>加入时间</dt><dd id="profileCreatedAt">—</dd></div>
+            </dl>
+
+            <div class="profile-actions">
+                <button class="profile-action is-active" type="button" data-profile-panel="basicProfilePanel">个人资料</button>
+                <button class="profile-action" type="button" data-profile-panel="passwordPanel">修改密码</button>
+            </div>
+
+            <form class="account-form profile-form" id="basicProfilePanel" novalidate>
+                <div class="form-message" id="profileMessage" role="status" aria-live="polite"></div>
+                <label class="field-group">
+                    <span>游戏昵称</span>
+                    <span class="field-control">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4l11-11-4-4L4 16v4Zm9-13 4 4"></path></svg>
+                        <input id="displayNameInput" name="displayName" type="text" maxlength="16"
+                            autocomplete="nickname" placeholder="你的游戏昵称" required>
+                    </span>
+                    <small>保存后会同步为联机模式的默认昵称</small>
+                </label>
+                <button class="account-primary-btn compact" type="submit">保存资料</button>
+            </form>
+
+            <form class="account-form profile-form" id="passwordPanel" hidden novalidate>
+                <div class="form-message" id="passwordMessage" role="status" aria-live="polite"></div>
+                <label class="field-group">
+                    <span>当前密码</span>
+                    <span class="field-control">
+                        <input id="currentPassword" name="currentPassword" type="password" autocomplete="current-password" required>
+                    </span>
+                </label>
+                <label class="field-group">
+                    <span>新密码</span>
+                    <span class="field-control">
+                        <input id="newPassword" name="newPassword" type="password" autocomplete="new-password"
+                            placeholder="至少 8 位，包含字母和数字" maxlength="72" required>
+                    </span>
+                </label>
+                <button class="account-primary-btn compact" type="submit">更新密码</button>
+            </form>
+
+            <a class="continue-game-link" href="./index.html">返回游戏大厅 <span aria-hidden="true">→</span></a>
+        </section>
+
+        <footer class="account-footer">© 2026 极简飞行棋 · 让每一次起飞都有迹可循</footer>
+    </main>
+
+    <script>
+        if (window.location.protocol === 'file:') {
+            const localAccountScript = document.createElement('script');
+            localAccountScript.src = './js/account.js';
+            document.body.appendChild(localAccountScript);
+        }
+    </script>
+    <script type="module" src="./js/accountEntry.js"></script>
+</body>
+
+</html>

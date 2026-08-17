@@ -2,6 +2,7 @@ import { emojis, defaultEmoji } from '../assets/emojis.js';
 import { MultiplayerManager } from './multiplayerManager.js';
 import { nicknameGenerator } from './nicknameGenerator.js';
 import { audioManager } from './audioManager.js';
+import './accountStatus.js';
 window.audioManager = audioManager;
 
 // 页面完全加载后，在浏览器空闲时静默预加载音频，不影响首屏体验
@@ -23,7 +24,7 @@ class GameTipsCarousel {
             "困难AI会智能分析局势，优先发起进攻",
             "简单AI只会随机选择棋子移动",
             "道具模式：击败对手获得积分，使用强大道具",
-            "摇到偶数点数即可起飞（出棋）",
+            "起飞点数由房主在开局前设置",
             "摇到6点后可以再投一次",
             "棋子停在自身颜色格子时，跳到下一个同色格子",
             "今天的骰子也超可爱~",
@@ -1709,34 +1710,7 @@ class PlayerSetup {
         const lastGameMode = sessionStorage.getItem('lastGameMode');
         if (lastGameMode) {
             console.log('恢复上次的游戏模式:', lastGameMode);
-
-            if (lastGameMode === 'ai') {
-                // 模拟点击人机对战按钮
-                this.currentMode = 'ai';
-                const configTitle = document.getElementById('configTitle');
-                configTitle.textContent = '人机对战设置';
-                this.showConfigPanel();
-                this.showAIConfig();
-
-                // 恢复AI配置详细信息
-                this.restoreAIConfig();
-                sessionStorage.removeItem('lastGameMode');
-                return true;
-            } else if (lastGameMode === 'local') {
-                // 模拟点击本地多人按钮
-                this.currentMode = 'local';
-                const configTitle = document.getElementById('configTitle');
-                configTitle.textContent = '本地多人设置';
-                this.showConfigPanel();
-                this.hideAIConfig();
-
-                // 恢复本地多人配置详细信息
-                this.restoreLocalConfig();
-                sessionStorage.removeItem('lastGameMode');
-                return true;
-            }
-
-            // 清除保存的状态，避免下次访问时自动恢复
+            // 人机对战和本地多人暂时停用，不恢复旧页面状态。
             sessionStorage.removeItem('lastGameMode');
         }
         return false;
