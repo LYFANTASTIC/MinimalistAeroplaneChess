@@ -186,9 +186,9 @@ async function createUser(input) {
 - Modify: `backend/repositories/userRepository.cjs`
 - Modify: `backend/server.cjs` near the auth routes
 
-- [ ] Write API handler tests for authenticated summary and cursor pagination. Cover 401, a valid next cursor, a malformed cursor returning 400, and page-size clamping.
-- [ ] Implement opaque cursors as base64url-encoded JSON containing `createdAt` and `id`; use `(created_at, id) < ($1, $2)` ordering to make pagination stable.
-- [ ] Implement:
+- [x] Write API handler tests for authenticated summary and cursor pagination. Cover 401, a valid next cursor, a malformed cursor returning 400, and page-size clamping.
+- [x] Implement opaque cursors as base64url-encoded JSON containing `createdAt` and `id`; use `(created_at, id) < ($1, $2)` ordering to make pagination stable.
+- [x] Implement:
 
 ```text
 GET /api/account/summary
@@ -196,10 +196,10 @@ GET /api/account/matches?limit=20&cursor=...
 GET /api/account/points?limit=20&cursor=...
 ```
 
-- [ ] Return decimal database values as JSON numbers only after validating they are finite; otherwise fail the request rather than exposing corrupt balances.
-- [ ] Ensure each query is scoped to `req.auth.user.id`; AI records and other users' data must never appear.
-- [ ] Run backend tests and confirm all account API cases pass.
-- [ ] Commit: `feat: expose account history APIs`
+- [x] Return decimal database values as JSON numbers only after validating they are finite; otherwise fail the request rather than exposing corrupt balances.
+- [x] Ensure each query is scoped to `req.auth.user.id`; AI records and other users' data must never appear.
+- [x] Run backend tests and confirm all account API cases pass.
+- [x] Commit: `feat: expose account history APIs`
 
 ## Task 5: Persist match creation and settlement
 

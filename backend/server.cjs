@@ -7,6 +7,8 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { UserConflictError, createUserRepository } = require('./repositories/userRepository.cjs');
+const { createMatchRepository } = require('./repositories/matchRepository.cjs');
+const { createAccountHandlers } = require('./routes/accountRoutes.cjs');
 
 const app = express();
 const server = http.createServer(app);
@@ -65,6 +67,8 @@ const authSessions = new Map();
 const authAttempts = new Map();
 const chatAttempts = new Map();
 const userRepository = createUserRepository();
+const matchRepository = createMatchRepository();
+const accountHandlers = createAccountHandlers({ userRepository, matchRepository });
 
 function normalizeEmail(value) {
   return String(value || '').trim().toLowerCase();
@@ -4888,6 +4892,10 @@ app.post('/api/auth/login', authRateLimit, async (req, res) => {
 app.get('/api/auth/me', requireAuth, (req, res) => {
   res.json({ success: true, user: publicUser(req.auth.user) });
 });
+
+app.get('/api/account/summary', requireAuth, accountHandlers.summary);
+app.get('/api/account/matches', requireAuth, accountHandlers.matches);
+app.get('/api/account/points', requireAuth, accountHandlers.points);
 
 /**
  * 退出登录
