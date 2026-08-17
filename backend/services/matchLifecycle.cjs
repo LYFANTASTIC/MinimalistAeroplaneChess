@@ -42,21 +42,26 @@ function buildMatchRecord(session) {
 }
 
 function getPlacementOrder(session, message) {
-  if (Array.isArray(message.rankings) && message.rankings.length > 0) {
-    return message.rankings
-      .map(ranking => Number(ranking.playerNumber ?? ranking.player))
-      .filter(Number.isInteger);
-  }
-
   const players = Array.from(session.players.values());
   const winnerSeat = Number(message.winnerPlayer);
-  const latestProgress = session.gameData?.progressHistory?.at(-1)?.players || {};
+  const chessBySeat = session.gameData?.playerChess || {};
+  const progressBySeat = new Map(players.map(player => {
+    const pieces = Array.isArray(chessBySeat[player.color]) ? chessBySeat[player.color] : [];
+    return [player.color, {
+      finished: pieces.filter(piece => piece?.finished || piece?.position === 56).length,
+      total: pieces.reduce((sum, piece) => sum + Math.max(0, Number(piece?.position) || 0), 0)
+    }];
+  }));
   return players
     .map(player => player.color)
     .sort((left, right) => {
       if (left === winnerSeat) return -1;
       if (right === winnerSeat) return 1;
-      return Number(latestProgress[right] || 0) - Number(latestProgress[left] || 0);
+      const leftProgress = progressBySeat.get(left);
+      const rightProgress = progressBySeat.get(right);
+      return rightProgress.finished - leftProgress.finished
+        || rightProgress.total - leftProgress.total
+        || left - right;
     });
 }
 
@@ -66,18 +71,13 @@ function buildSettlementRecord(session, message, endReason) {
     ? endedTimestamp
     : Date.now();
   const order = getPlacementOrder(session, message);
-  const rankingBySeat = new Map(
-    (Array.isArray(message.rankings) ? message.rankings : [])
-      .map(ranking => [Number(ranking.playerNumber ?? ranking.player), ranking])
-  );
   const winnerSeat = Number.isInteger(Number(message.winnerPlayer))
     ? Number(message.winnerPlayer)
     : order[0];
   const winnerPlayer = Array.from(session.players.values()).find(player => player.color === winnerSeat);
   const winnerTeamNo = getTeamNo(session, winnerSeat);
-  const titleStats = message.titleStats || {};
-  const defeatCounts = titleStats.defeatCounts || session.gameData?.defeatCounts || {};
-  const diceStatistics = titleStats.diceStatistics || session.gameData?.diceStatistics || {};
+  const defeatCounts = session.gameData?.defeatCounts || {};
+  const diceStatistics = session.gameData?.diceStatistics || {};
 
   return {
     matchId: session.matchId,
@@ -89,7 +89,6 @@ function buildSettlementRecord(session, message, endReason) {
     sequenceNo: session.nextEventSequence(),
     players: Array.from(session.players.values()).map(player => {
       const teamNo = getTeamNo(session, player.color);
-      const ranking = rankingBySeat.get(player.color);
       return {
         userId: player.isAI ? null : (player.accountUserId || null),
         seat: player.color,
@@ -97,10 +96,10 @@ function buildSettlementRecord(session, message, endReason) {
         isWinner: session.teamMode ? teamNo === winnerTeamNo : player.color === winnerSeat,
         planesDefeated: sumCounts(defeatCounts[player.color]),
         happyCollisions: 0,
-        movementDistance: nonNegativeInteger(titleStats.totalDistance?.[player.color]),
-        bounceDistance: nonNegativeInteger(titleStats.bounceSteps?.[player.color]),
+        movementDistance: 0,
+        bounceDistance: 0,
         diceStatistics: diceStatistics[player.color] || {},
-        titles: normalizeTitles(ranking?.title ?? ranking?.titles)
+        titles: []
       };
     })
   };

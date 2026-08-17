@@ -8,7 +8,11 @@ const {
 } = require('./rewardFormula.cjs');
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const RETRYABLE_CODES = new Set(['40001', '40P01', '55P03', '57P01', '57P02', '57P03', 'ETIMEDOUT', 'ECONNRESET']);
+const RETRYABLE_CODES = new Set([
+  '40001', '40P01', '55P03', '57P01', '57P02', '57P03',
+  'ETIMEDOUT', 'ECONNRESET', 'ECONNREFUSED', 'ECONNABORTED',
+  'EAI_AGAIN', 'ENETUNREACH', 'EHOSTUNREACH'
+]);
 
 function calculateReward(input) {
   if (input.eventType === 'plane_defeated') return calculatePlaneDefeatReward(input);
@@ -56,6 +60,7 @@ function createRewardRetryQueue({
   sleep = delay => new Promise(resolve => setTimeout(resolve, delay))
 }) {
   const pending = new Map();
+  const deferredFailures = new Map();
 
   function enqueue(input, callbacks = {}) {
     const key = makeIdempotencyKey(input);
@@ -77,6 +82,9 @@ function createRewardRetryQueue({
           if (!isRetryableDatabaseError(error) || attempt === retryDelays.length) break;
         }
       }
+      if (isRetryableDatabaseError(lastError)) {
+        deferredFailures.set(key, { matchId: input.matchId, input, callbacks });
+      }
       try { callbacks.onFailure?.(lastError); } catch (callbackError) {
         console.error('[账户积分] 失败回调失败:', callbackError);
       }
@@ -93,12 +101,29 @@ function createRewardRetryQueue({
       .filter(entry => entry.matchId === matchId)
       .map(entry => entry.promise);
     await Promise.allSettled(promises);
+
+    const retries = Array.from(deferredFailures.entries())
+      .filter(([, entry]) => entry.matchId === matchId);
+    for (const [key, entry] of retries) {
+      try {
+        const result = await award(entry.input);
+        deferredFailures.delete(key);
+        try { entry.callbacks.onSuccess?.(result); } catch (callbackError) {
+          console.error('[账户积分] 结算重试成功回调失败:', callbackError);
+        }
+      } catch (error) {
+        if (!isRetryableDatabaseError(error)) deferredFailures.delete(key);
+        try { entry.callbacks.onFailure?.(error); } catch (callbackError) {
+          console.error('[账户积分] 结算重试失败回调失败:', callbackError);
+        }
+      }
+    }
   }
 
   return {
     enqueue,
     flushPendingForMatch,
-    pendingCount: () => pending.size
+    pendingCount: () => pending.size + deferredFailures.size
   };
 }
 

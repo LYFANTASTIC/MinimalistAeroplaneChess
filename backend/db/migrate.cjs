@@ -1,5 +1,7 @@
 'use strict';
 
+require('../config/loadEnv.cjs').loadEnvironment();
+
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -97,4 +99,3 @@ module.exports = {
   listMigrationFiles,
   runMigrations
 };
-

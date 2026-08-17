@@ -130,9 +130,10 @@ test('account summary maps exact numeric values and counters', async () => {
 
   const summary = await repository.getAccountSummary(DATABASE_USER.id);
 
+  assert.equal(summary.user, undefined);
+  assert.doesNotMatch(JSON.stringify(summary), /passwordSalt|passwordHash|password_salt|password_hash/);
   assert.equal(summary.pointsBalance, 125.5);
   assert.equal(summary.stats.lifetimePointsEarned, 160.25);
   assert.equal(summary.stats.gamesPlayed, 8);
   assert.equal(summary.stats.planesDefeated, 14);
 });
-

@@ -24,10 +24,11 @@ function createSession(overrides = {}) {
       ['target', { id: 'target', color: 2, accountUserId: null, isAI: false }]
     ]),
     gameData: {
-      _pendingMove: { player: 1, chessIndex: 0, timestamp: 12345 },
+      diceValue: 4,
+      _pendingMove: { player: 1, chessIndex: 0, fromPosition: 16, diceValue: 4, timestamp: 12345 },
       playerChess: {
-        1: [{ position: 8, finished: false }],
-        2: [{ position: 27, finished: false }]
+        1: [{ position: 16, finished: false }],
+        2: [{ position: 7, finished: false }]
       }
     },
     nextEventSequence() { sequence += 1; return sequence; },
@@ -138,4 +139,62 @@ test('duplicate facts in the same move reuse one server sequence', async () => {
 
   assert.equal(first.sequenceNo, duplicate.sequenceNo);
   assert.equal(enqueued, 1);
+});
+
+test('unsupported reward event types are rejected before deduplication', () => {
+  const session = createSession({ happyMode: true });
+  const handler = createRewardMessageHandler({
+    pointsService: {},
+    sendToPlayer() {},
+    canControlPlayerColor: () => true
+  });
+
+  assert.throws(
+    () => handler.handle('controller', {
+      eventType: 'happy_collision:forged', player: 1, targetPlayer: 2,
+      targetPieceIndex: 0, collisionPosition: 20
+    }, session),
+    /无效的积分事件/
+  );
+});
+
+test('normal rewards must match a collision position reachable by the pending move', () => {
+  const session = createSession();
+  session.gameData.playerChess[2][0].position = 27;
+  const handler = createRewardMessageHandler({
+    pointsService: {},
+    sendToPlayer() {},
+    canControlPlayerColor: () => true
+  });
+
+  assert.throws(
+    () => handler.handle('controller', {
+      eventType: 'plane_defeated', player: 1, targetPlayer: 2, targetPieceIndex: 0
+    }, session),
+    /不在本次移动路径/
+  );
+});
+
+test('happy rewards advance along the server-derived collision chain', () => {
+  const session = createSession({ happyMode: true });
+  const previews = [];
+  const handler = createRewardMessageHandler({
+    pointsService: {
+      previewReward(input) {
+        previews.push(input);
+        return { amount: 20, idempotencyKey: `key-${input.sequenceNo}` };
+      },
+      enqueue() {}
+    },
+    sendToPlayer() {},
+    canControlPlayerColor: () => true
+  });
+
+  handler.handle('controller', {
+    eventType: 'happy_collision', player: 1, targetPlayer: 2,
+    targetPieceIndex: 0, collisionPosition: 20
+  }, session);
+
+  assert.equal(previews.length, 1);
+  assert.equal(session.gameData._pendingMove.rewardCursorPosition, 26);
 });

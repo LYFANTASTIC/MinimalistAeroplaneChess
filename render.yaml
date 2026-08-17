@@ -12,3 +12,9 @@ services:
         value: 20.19.0
       - key: NODE_ENV
         value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_SSL
+        value: "true"
+      - key: DATABASE_POOL_MAX
+        value: "5"

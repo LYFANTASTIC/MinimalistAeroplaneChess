@@ -81,6 +81,7 @@ function createMatchRepository({
           `INSERT INTO app.matches
            (id, room_code, happy_mode, team_mode, piece_count, launch_number, started_at)
            VALUES ($1, $2, $3, $4, $5, $6, $7)
+           ON CONFLICT (id) DO NOTHING
            RETURNING id`,
           [
             input.id,
@@ -97,9 +98,10 @@ function createMatchRepository({
           await client.query(
             `INSERT INTO app.match_players
              (match_id, user_id, seat, team_no, is_ai, display_name_snapshot)
-             VALUES ($1, $2, $3, $4, $5, $6)`,
+             VALUES ($1, $2, $3, $4, $5, $6)
+             ON CONFLICT (match_id, seat) DO NOTHING`,
             [
-              match.id,
+              input.id,
               player.userId,
               player.seat,
               player.teamNo,
@@ -108,7 +110,7 @@ function createMatchRepository({
             ]
           );
         }
-        return match.id;
+        return match?.id || input.id;
       });
     },
 
@@ -134,16 +136,13 @@ function createMatchRepository({
         for (const player of input.players) {
           await client.query(
             `UPDATE app.match_players
-             SET placement = $3, planes_defeated = $4, happy_collisions = $5,
-                 movement_distance = $6, bounce_distance = $7,
-                 dice_statistics = $8::jsonb, titles = $9::jsonb, finished_at = $10
+             SET placement = $3, movement_distance = $4, bounce_distance = $5,
+                 dice_statistics = $6::jsonb, titles = $7::jsonb, finished_at = $8
              WHERE match_id = $1 AND seat = $2`,
             [
               input.matchId,
               player.seat,
               player.placement,
-              player.planesDefeated,
-              player.happyCollisions,
               player.movementDistance,
               player.bounceDistance,
               JSON.stringify(player.diceStatistics || {}),

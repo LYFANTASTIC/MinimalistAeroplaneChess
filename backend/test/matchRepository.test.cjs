@@ -90,3 +90,42 @@ test('points history is scoped to the authenticated user', async () => {
   assert.deepEqual(calls[0].params, [USER_ID, '2026-08-04T01:00:00.000Z', ROW_ID, 21]);
 });
 
+test('settlement preserves reward-derived defeat and happy-collision counters', async () => {
+  const calls = [];
+  const client = {
+    async query(sql, params) {
+      calls.push({ sql, params });
+      if (/UPDATE app\.matches/i.test(sql)) return { rows: [{ id: 'match-1' }] };
+      return { rows: [] };
+    }
+  };
+  const repository = createMatchRepository({
+    poolProvider: () => ({}),
+    transactionRunner: async (_pool, work) => work(client)
+  });
+
+  await repository.settleMatch({
+    matchId: 'match-1',
+    endReason: 'normal',
+    endedAt: '2026-08-17T02:00:00.000Z',
+    durationMs: 1000,
+    winnerUserId: USER_ID,
+    winnerTeamNo: null,
+    sequenceNo: 9,
+    players: [{
+      userId: USER_ID,
+      seat: 1,
+      placement: 1,
+      isWinner: true,
+      planesDefeated: 3,
+      happyCollisions: 2,
+      movementDistance: 80,
+      bounceDistance: 4,
+      diceStatistics: {},
+      titles: []
+    }]
+  });
+
+  const playerUpdate = calls.find(call => /UPDATE app\.match_players/i.test(call.sql));
+  assert.doesNotMatch(playerUpdate.sql, /planes_defeated|happy_collisions/i);
+});

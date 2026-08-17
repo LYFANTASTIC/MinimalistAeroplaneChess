@@ -3,7 +3,8 @@ const assert = require('node:assert/strict');
 
 const {
   buildImportUser,
-  importUsers
+  importUsers,
+  resolveUserDataPath
 } = require('../scripts/import-users.cjs');
 
 const JSON_USER = Object.freeze({
@@ -51,4 +52,12 @@ test('apply mode reports inserted and skipped users', async () => {
   });
 
   assert.deepEqual(result, { validated: 2, inserted: 1, skipped: 1 });
+});
+
+test('configured import paths are resolved from the repository root', () => {
+  const rootDirectory = 'C:/example/project';
+  assert.equal(
+    resolveUserDataPath('backend/data/users.json', rootDirectory),
+    require('node:path').resolve(rootDirectory, 'backend/data/users.json')
+  );
 });

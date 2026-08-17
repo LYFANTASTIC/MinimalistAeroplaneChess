@@ -110,4 +110,3 @@ CREATE INDEX IF NOT EXISTS points_ledger_user_history_idx
 CREATE INDEX IF NOT EXISTS match_events_actor_idx
   ON app.match_events (actor_user_id, created_at DESC)
   WHERE actor_user_id IS NOT NULL;
-

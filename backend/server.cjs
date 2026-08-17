@@ -1,4 +1,4 @@
-require('dotenv').config();
+require('./config/loadEnv.cjs').loadEnvironment();
 
 const WebSocket = require('ws');
 const http = require('http');
@@ -8,10 +8,17 @@ const path = require('path');
 const crypto = require('crypto');
 const { UserConflictError, createUserRepository } = require('./repositories/userRepository.cjs');
 const { createMatchRepository } = require('./repositories/matchRepository.cjs');
+const { healthCheck } = require('./db/pool.cjs');
 const { createAccountHandlers } = require('./routes/accountRoutes.cjs');
+const { createHealthHandler } = require('./routes/healthRoutes.cjs');
 const { buildMatchRecord, buildSettlementRecord } = require('./services/matchLifecycle.cjs');
 const { createPointsService } = require('./services/pointsService.cjs');
+const { retryTransientOperation } = require('./services/persistenceRetry.cjs');
 const { createRewardMessageHandler } = require('./services/rewardMessageHandler.cjs');
+const {
+  authorizeForcedSettlement,
+  authorizeNormalSettlement
+} = require('./services/settlementAuthorization.cjs');
 const { ITEMS_ENABLED } = require('./config/features.cjs');
 
 const app = express();
@@ -590,7 +597,9 @@ class GameSession {
     this.createdAt = Date.now();
     this.eventSequence = 0;
     this.persistenceState = 'active';
+    this.matchCreationState = 'pending';
     this.matchPersistenceReady = null;
+    this.ensureMatchPersistence = null;
     this.settlementPromise = null;
     this.rewardFactsSeen = new Map();
     this.pieceCount = pieceCount;
@@ -714,24 +723,45 @@ class GameSession {
 }
 
 function beginMatchPersistence(gameSession) {
-  gameSession.matchPersistenceReady = matchRepository.createMatch(buildMatchRecord(gameSession))
-    .then(() => true)
-    .catch(error => {
-      gameSession.persistenceState = 'creation_failed';
-      console.error(`[对局持久化] 创建对局 ${gameSession.matchId} 失败:`, error);
-      return false;
-    });
+  const record = buildMatchRecord(gameSession);
+  let created = false;
+  let inFlight = null;
+  gameSession.ensureMatchPersistence = () => {
+    if (created) return Promise.resolve(true);
+    if (inFlight) return inFlight;
+    gameSession.matchCreationState = 'creating';
+    inFlight = retryTransientOperation(() => matchRepository.createMatch(record))
+      .then(() => {
+        created = true;
+        gameSession.matchCreationState = 'created';
+        return true;
+      })
+      .catch(error => {
+        gameSession.matchCreationState = 'failed';
+        console.error(`[对局持久化] 创建对局 ${gameSession.matchId} 失败:`, error);
+        return false;
+      })
+      .finally(() => {
+        inFlight = null;
+      });
+    gameSession.matchPersistenceReady = inFlight;
+    return inFlight;
+  };
+  gameSession.ensureMatchPersistence();
 }
 
 function beginMatchSettlement(gameSession, message, endReason) {
   if (!(gameSession instanceof GameSession) || gameSession.persistenceState !== 'active') return;
   gameSession.persistenceState = 'settling';
   const settlement = buildSettlementRecord(gameSession, message, endReason);
-  gameSession.settlementPromise = Promise.resolve(gameSession.matchPersistenceReady)
+  const matchReady = typeof gameSession.ensureMatchPersistence === 'function'
+    ? gameSession.ensureMatchPersistence()
+    : gameSession.matchPersistenceReady;
+  gameSession.settlementPromise = Promise.resolve(matchReady)
     .then(async ready => {
-      if (!ready) return false;
+      if (!ready) throw new Error('对局记录尚未保存，无法结算');
       await pointsService.flushPendingForMatch(gameSession.matchId);
-      return matchRepository.settleMatch(settlement);
+      return retryTransientOperation(() => matchRepository.settleMatch(settlement));
     })
     .then(saved => {
       gameSession.persistenceState = saved ? 'finished' : 'settlement_skipped';
@@ -747,8 +777,13 @@ function beginMatchSettlement(gameSession, message, endReason) {
 function queueAbandonedMatch(gameSession, endReason) {
   if (!gameSession?.matchId || gameSession.persistenceState !== 'active') return;
   gameSession.persistenceState = 'abandoning';
-  Promise.resolve(gameSession.matchPersistenceReady)
-    .then(ready => ready && matchRepository.abandonMatch(gameSession.matchId, endReason))
+  const matchReady = typeof gameSession.ensureMatchPersistence === 'function'
+    ? gameSession.ensureMatchPersistence()
+    : gameSession.matchPersistenceReady;
+  Promise.resolve(matchReady)
+    .then(ready => ready && retryTransientOperation(
+      () => matchRepository.abandonMatch(gameSession.matchId, endReason)
+    ))
     .then(saved => {
       gameSession.persistenceState = saved ? 'abandoned' : 'abandon_skipped';
     })
@@ -3279,6 +3314,8 @@ function handleFullMoveStart(ws, playerId, message) {
     target.gameData._pendingMove = {
       player: message.player,
       chessIndex: message.chessIndex,
+      fromPosition: message.fromPosition,
+      diceValue: message.diceValue,
       targetPosition: computedTarget,
       timestamp: Date.now()
     };
@@ -4669,8 +4706,14 @@ function handleProgressHistorySync(ws, playerId, message) {
 // 游戏结束（使用通用广播目标）
 function handleGameEnd(ws, playerId, message) {
   const target = getBroadcastTarget(playerId);
-  if (!target) throw new Error('玩家不在任何房间或游戏会话中');
-  beginMatchSettlement(target, message, 'normal');
+  if (!(target instanceof GameSession)) throw new Error('玩家不在游戏会话中');
+  const trustedSettlement = authorizeNormalSettlement({
+    session: target,
+    playerId,
+    message,
+    canControlPlayerColor
+  });
+  beginMatchSettlement(target, trustedSettlement, 'normal');
 
   // 重要：先广播，再清理会话映射。
   // 否则 removeGameSession 会清空 playerSessions，导致 GameSession.broadcast 由于映射校验而不发送给任何人。
@@ -4752,8 +4795,9 @@ function handleGameEnd(ws, playerId, message) {
 // 强制结算（使用通用广播目标）
 function handleForceSettlement(ws, playerId, message) {
   const target = getBroadcastTarget(playerId);
-  if (!target) throw new Error('玩家不在任何房间或游戏会话中');
-  beginMatchSettlement(target, message, 'force_settlement');
+  if (!(target instanceof GameSession)) throw new Error('玩家不在游戏会话中');
+  const trustedSettlement = authorizeForcedSettlement({ session: target, playerId });
+  beginMatchSettlement(target, trustedSettlement, 'force_settlement');
 
   // 重要：先广播，再清理会话映射。
   // 否则 removeGameSession 会清空 playerSessions，导致 GameSession.broadcast 由于映射校验而不发送给任何人。
@@ -5480,9 +5524,7 @@ function handleBoardSyncData(ws, playerId, message) {
 }
 
 // -------------------------- 静态文件服务 --------------------------
-app.get('/api/health', (req, res) => {
-  res.json({ success: true, timestamp: new Date().toISOString() });
-});
+app.get('/api/health', createHealthHandler({ checkDatabase: healthCheck }));
 
 const frontendSourceDirectory = path.resolve(__dirname, '../frontend');
 const frontendBuildDirectory = path.resolve(frontendSourceDirectory, 'dist');

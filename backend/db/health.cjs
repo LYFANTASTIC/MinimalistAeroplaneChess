@@ -1,5 +1,7 @@
 'use strict';
 
+require('../config/loadEnv.cjs').loadEnvironment();
+
 const { closePool, healthCheck } = require('./pool.cjs');
 
 healthCheck()
@@ -9,4 +11,3 @@ healthCheck()
     process.exitCode = 1;
   })
   .finally(closePool);
-

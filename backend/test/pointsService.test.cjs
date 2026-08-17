@@ -149,6 +149,8 @@ test('idempotency keys contain match, event, and account identities', () => {
 test('only transient database failures are retryable', () => {
   assert.equal(isRetryableDatabaseError({ code: '40001' }), true);
   assert.equal(isRetryableDatabaseError({ code: '08006' }), true);
+  assert.equal(isRetryableDatabaseError({ code: 'ECONNREFUSED' }), true);
+  assert.equal(isRetryableDatabaseError({ code: 'EAI_AGAIN' }), true);
   assert.equal(isRetryableDatabaseError({ code: '23505' }), false);
   assert.equal(isRetryableDatabaseError(new RangeError('invalid facts')), false);
 });
@@ -191,4 +193,30 @@ test('parallel duplicate enqueues share one award operation', async () => {
   assert.equal(first, second);
   await Promise.all([first, second]);
   assert.equal(attempts, 1);
+});
+
+test('settlement flush retries a transient reward that exhausted background attempts', async () => {
+  let attempts = 0;
+  const successes = [];
+  const queue = createRewardRetryQueue({
+    award: async () => {
+      attempts += 1;
+      if (attempts < 3) throw Object.assign(new Error('database unavailable'), { code: '08006' });
+      return { amount: 47.61, balance: 147.61, idempotencyKey: 'retry-key' };
+    },
+    retryDelays: [0],
+    sleep: async () => {}
+  });
+
+  await assert.rejects(
+    queue.enqueue(defeatInput(), { onSuccess: result => successes.push(result) }),
+    /database unavailable/
+  );
+  assert.equal(queue.pendingCount(), 1);
+
+  await queue.flushPendingForMatch(MATCH_ID);
+
+  assert.equal(attempts, 3);
+  assert.equal(successes.length, 1);
+  assert.equal(queue.pendingCount(), 0);
 });

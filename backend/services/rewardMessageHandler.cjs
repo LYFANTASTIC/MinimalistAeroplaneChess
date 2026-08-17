@@ -1,5 +1,8 @@
 'use strict';
 
+const REWARD_EVENT_TYPES = new Set(['plane_defeated', 'happy_collision']);
+const JUMP_POINTS = [2, 6, 10, 14, 18, 22, 26, 30, 34, 38, 42, 46];
+
 function getAbsolutePosition(player, relativePosition) {
   if (relativePosition === -1) return -1;
   if (relativePosition >= 51 || relativePosition === 0) return relativePosition;
@@ -34,7 +37,59 @@ function findPlayerBySeat(gameSession, seat) {
   return Array.from(gameSession.players.values()).find(player => player.color === seat) || null;
 }
 
-function buildPlaneDefeatInput(gameSession, actorPlayer, message, sequenceNo) {
+function nextJumpPoint(position) {
+  if (position === 46) return 50;
+  return JUMP_POINTS.find(candidate => candidate > position) ?? null;
+}
+
+function getBaseLandingPosition(pendingMove) {
+  const fromPosition = Number(pendingMove?.fromPosition);
+  const diceValue = Number(pendingMove?.diceValue);
+  if (!Number.isInteger(fromPosition) || fromPosition < -1 || fromPosition > 56) {
+    throw new RangeError('无效的移动起点');
+  }
+  if (!Number.isInteger(diceValue) || diceValue < 1 || diceValue > 6) {
+    throw new RangeError('无效的移动骰值');
+  }
+  if (fromPosition === -1) return 0;
+  const forward = fromPosition + diceValue;
+  return forward > 56 ? Math.max(0, 112 - forward) : forward;
+}
+
+function resolveHappyLanding(position) {
+  if (position === 14) return 30;
+  if (position === 18) return 34;
+  if (JUMP_POINTS.includes(position)) return nextJumpPoint(position) ?? position;
+  return position;
+}
+
+function validatePendingMove(gameSession, actorPlayer, pendingMove) {
+  const actorPiece = gameSession.gameData?.playerChess?.[actorPlayer.color]?.[pendingMove.chessIndex];
+  if (!actorPiece || actorPiece.finished || actorPiece.position !== pendingMove.fromPosition) {
+    throw new RangeError('移动起点与服务器棋盘不一致');
+  }
+  if (Number(gameSession.gameData?.diceValue) !== Number(pendingMove.diceValue)) {
+    throw new RangeError('移动骰值与服务器状态不一致');
+  }
+  return getBaseLandingPosition(pendingMove);
+}
+
+function getNormalCollisionPositions(actorSeat, baseLanding) {
+  const positions = new Set([baseLanding]);
+  if (baseLanding === 14) {
+    positions.add(18);
+    positions.add(30);
+  } else if (baseLanding === 18) {
+    positions.add(30);
+    positions.add(34);
+  } else if (JUMP_POINTS.includes(baseLanding)) {
+    const next = nextJumpPoint(baseLanding);
+    if (next != null) positions.add(next);
+  }
+  return new Set(Array.from(positions, position => getAbsolutePosition(actorSeat, position)));
+}
+
+function buildPlaneDefeatInput(gameSession, actorPlayer, message, sequenceNo, baseLanding) {
   if (gameSession.happyMode) throw new RangeError('欢乐模式不能上报普通撞机');
   const targetSeat = Number(message.targetPlayer);
   const targetPieceIndex = Number(message.targetPieceIndex);
@@ -45,6 +100,10 @@ function buildPlaneDefeatInput(gameSession, actorPlayer, message, sequenceNo) {
   const targetPlayer = findPlayerBySeat(gameSession, targetSeat);
   const targetPiece = gameSession.gameData?.playerChess?.[targetSeat]?.[targetPieceIndex];
   if (!targetPlayer || !targetPiece) throw new RangeError('被撞棋子不存在');
+  const targetAbsolutePosition = getAbsolutePosition(targetSeat, targetPiece.position);
+  if (!getNormalCollisionPositions(actorPlayer.color, baseLanding).has(targetAbsolutePosition)) {
+    throw new RangeError('被撞棋子不在本次移动路径');
+  }
 
   return {
     matchId: gameSession.matchId,
@@ -60,7 +119,7 @@ function buildPlaneDefeatInput(gameSession, actorPlayer, message, sequenceNo) {
   };
 }
 
-function buildHappyCollisionInput(gameSession, actorPlayer, message, sequenceNo) {
+function buildHappyCollisionInput(gameSession, actorPlayer, message, sequenceNo, baseLanding, pendingMove) {
   if (!gameSession.happyMode) throw new RangeError('普通模式不能上报欢乐碰撞');
   const targetSeat = Number(message.targetPlayer);
   const collisionPosition = Number(message.collisionPosition);
@@ -69,6 +128,9 @@ function buildHappyCollisionInput(gameSession, actorPlayer, message, sequenceNo)
   if (!Number.isInteger(collisionPosition) || collisionPosition < 0 || collisionPosition > 50) {
     throw new RangeError('无效的碰撞位置');
   }
+
+  const expectedPosition = pendingMove.rewardCursorPosition ?? resolveHappyLanding(baseLanding);
+  if (collisionPosition !== expectedPosition) throw new RangeError('碰撞位置不在本次移动路径');
 
   const absolutePosition = getAbsolutePosition(actorPlayer.color, collisionPosition);
   const targetPieces = gameSession.gameData?.playerChess?.[targetSeat] || [];
@@ -80,6 +142,9 @@ function buildHappyCollisionInput(gameSession, actorPlayer, message, sequenceNo)
     }
   });
   if (matchingIndexes.length === 0) throw new RangeError('服务器未确认到碰撞棋子');
+  pendingMove.rewardCursorPosition = resolveHappyLanding(
+    Math.min(56, collisionPosition + Math.max(2, matchingIndexes.length * 2))
+  );
 
   return {
     matchId: gameSession.matchId,
@@ -100,6 +165,7 @@ function buildHappyCollisionInput(gameSession, actorPlayer, message, sequenceNo)
 
 function createRewardMessageHandler({ pointsService, sendToPlayer, canControlPlayerColor }) {
   function handle(controllerPlayerId, message, gameSession) {
+    if (!REWARD_EVENT_TYPES.has(message.eventType)) throw new RangeError('无效的积分事件');
     const actorSeat = Number(message.player);
     if (!canControlPlayerColor(gameSession, controllerPlayerId, actorSeat)) {
       throw new Error('当前账号不能操作这个玩家');
@@ -111,6 +177,7 @@ function createRewardMessageHandler({ pointsService, sendToPlayer, canControlPla
     if (!actorPlayer || actorPlayer.isAI || !actorPlayer.accountUserId) {
       return { skipped: true, reason: 'no_account' };
     }
+    const baseLanding = validatePendingMove(gameSession, actorPlayer, pendingMove);
 
     const targetSeat = Number(message.targetPlayer);
     const factSuffix = message.eventType === 'happy_collision'
@@ -126,8 +193,8 @@ function createRewardMessageHandler({ pointsService, sendToPlayer, canControlPla
 
     const sequenceNo = gameSession.nextEventSequence();
     const input = message.eventType === 'plane_defeated'
-      ? buildPlaneDefeatInput(gameSession, actorPlayer, message, sequenceNo)
-      : buildHappyCollisionInput(gameSession, actorPlayer, message, sequenceNo);
+      ? buildPlaneDefeatInput(gameSession, actorPlayer, message, sequenceNo, baseLanding)
+      : buildHappyCollisionInput(gameSession, actorPlayer, message, sequenceNo, baseLanding, pendingMove);
     const preview = pointsService.previewReward(input);
     const pendingPayload = {
       type: 'accountPointsPending',
@@ -140,7 +207,10 @@ function createRewardMessageHandler({ pointsService, sendToPlayer, canControlPla
     gameSession.rewardFactsSeen.set(factKey, { input, pendingPayload });
     sendToPlayer(actorPlayer.id, pendingPayload);
 
-    Promise.resolve(gameSession.matchPersistenceReady).then(ready => {
+    const matchReady = typeof gameSession.ensureMatchPersistence === 'function'
+      ? gameSession.ensureMatchPersistence()
+      : gameSession.matchPersistenceReady;
+    Promise.resolve(matchReady).then(ready => {
       if (!ready) {
         sendToPlayer(actorPlayer.id, {
           type: 'accountPointsSyncFailed',
@@ -187,5 +257,7 @@ module.exports = {
   buildPlaneDefeatInput,
   calculatePieceProgress,
   createRewardMessageHandler,
-  getAbsolutePosition
+  getAbsolutePosition,
+  getNormalCollisionPositions,
+  resolveHappyLanding
 };

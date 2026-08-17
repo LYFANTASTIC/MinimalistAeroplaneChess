@@ -158,7 +158,7 @@ function createUserRepository({
 
     async getAccountSummary(id) {
       const { rows: [row] } = await poolProvider().query(
-        `SELECT u.*, w.points_balance,
+        `SELECT w.points_balance,
                 s.games_played, s.games_won, s.planes_defeated,
                 s.happy_collisions, s.lifetime_points_earned
          FROM app.users u
@@ -169,7 +169,6 @@ function createUserRepository({
       );
       if (!row) return null;
       return {
-        user: mapUser(row),
         pointsBalance: toFiniteNumber(row.points_balance, 'points_balance'),
         stats: {
           gamesPlayed: toSafeInteger(row.games_played, 'games_played'),
@@ -190,4 +189,3 @@ module.exports = {
   toFiniteNumber,
   toSafeInteger
 };
-

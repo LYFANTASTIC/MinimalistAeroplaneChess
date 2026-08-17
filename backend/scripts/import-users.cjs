@@ -1,11 +1,20 @@
 'use strict';
 
+require('../config/loadEnv.cjs').loadEnvironment();
+
 const fs = require('node:fs');
 const path = require('node:path');
 const { closePool } = require('../db/pool.cjs');
 const { createUserRepository } = require('../repositories/userRepository.cjs');
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const REPOSITORY_ROOT = path.resolve(__dirname, '../..');
+
+function resolveUserDataPath(configuredPath = 'backend/data/users.json', rootDirectory = REPOSITORY_ROOT) {
+  return path.isAbsolute(configuredPath)
+    ? configuredPath
+    : path.resolve(rootDirectory, configuredPath);
+}
 
 function requireString(value, field) {
   if (typeof value !== 'string' || value.length === 0) throw new TypeError(`Invalid user field: ${field}`);
@@ -49,9 +58,7 @@ async function importUsers({ users, apply, insertUser }) {
 
 async function runCli() {
   const apply = process.argv.includes('--apply');
-  const sourcePath = path.resolve(
-    process.env.USER_DATA_FILE || path.join(__dirname, '../data/users.json')
-  );
+  const sourcePath = resolveUserDataPath(process.env.USER_DATA_FILE);
   const source = JSON.parse(fs.readFileSync(sourcePath, 'utf8'));
   const repository = createUserRepository();
   const result = await importUsers({
@@ -75,6 +82,6 @@ if (require.main === module) {
 module.exports = {
   buildImportUser,
   importUsers,
+  resolveUserDataPath,
   runCli
 };
-

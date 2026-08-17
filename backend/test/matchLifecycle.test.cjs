@@ -42,6 +42,27 @@ test('match creation stores human account ids and an accountless AI', async () =
   assert.equal(playerCalls.length, 3);
   assert.equal(playerCalls[0].params[1], USER_ONE);
   assert.equal(playerCalls[2].params[1], null);
+  assert.match(playerCalls[0].sql, /ON CONFLICT \(match_id, seat\) DO NOTHING/i);
+});
+
+test('match creation is idempotent after an unknown commit result', async () => {
+  const repository = createTransactionRepository(async sql => {
+    if (/INSERT INTO app\.matches/i.test(sql)) return { rows: [] };
+    return { rows: [] };
+  });
+
+  const created = await repository.createMatch({
+    id: MATCH_ID,
+    roomCode: 'ABCD',
+    happyMode: false,
+    teamMode: false,
+    pieceCount: 1,
+    launchNumber: 'even',
+    startedAt: '2026-08-17T01:00:00.000Z',
+    players: [{ userId: USER_ONE, seat: 1, teamNo: null, isAi: false, displayName: '玩家一' }]
+  });
+
+  assert.equal(created, MATCH_ID);
 });
 
 test('settlement writes results and aggregate game counts once', async () => {

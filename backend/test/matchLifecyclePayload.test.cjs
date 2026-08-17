@@ -23,6 +23,10 @@ function createSession() {
       [2, { id: 2, accountUserId: null, color: 2, nickname: 'Bot-1', isAI: true }]
     ]),
     gameData: {
+      playerChess: {
+        1: [{ position: 56, finished: true }, { position: 56, finished: true }, { position: 56, finished: true }, { position: 56, finished: true }],
+        2: [{ position: 20, finished: false }, { position: 10, finished: false }, { position: -1, finished: false }, { position: -1, finished: false }]
+      },
       defeatCounts: { 1: { 2: 3 }, 2: { 1: 0 } },
       diceStatistics: { 1: { 6: 2 }, 2: { 6: 1 } },
       progressHistory: [{ round: 1, players: { 1: 100, 2: 35 } }]
@@ -38,7 +42,7 @@ test('match record snapshots human ids, AI, and seats', () => {
   assert.equal(record.players[1].isAi, true);
 });
 
-test('normal settlement puts the winner first and derives player statistics', () => {
+test('normal settlement puts the winner first and only derives server statistics', () => {
   const session = createSession();
   const record = buildSettlementRecord(session, {
     winnerPlayer: 1,
@@ -54,12 +58,13 @@ test('normal settlement puts the winner first and derives player statistics', ()
   assert.equal(record.winnerUserId, USER_ONE);
   assert.equal(record.players[0].placement, 1);
   assert.equal(record.players[0].planesDefeated, 3);
-  assert.equal(record.players[0].movementDistance, 25);
+  assert.equal(record.players[0].movementDistance, 0);
+  assert.deepEqual(record.players[0].diceStatistics, { 6: 2 });
   assert.equal(record.durationMs, 1200000);
   assert.equal(record.sequenceNo, 4);
 });
 
-test('forced settlement respects the supplied seat order', () => {
+test('forced settlement derives seat order from server chess state', () => {
   const session = createSession();
   const record = buildSettlementRecord(session, {
     timestamp: Date.parse('2026-08-17T01:10:00.000Z'),
@@ -69,6 +74,7 @@ test('forced settlement respects the supplied seat order', () => {
     ]
   }, 'force_settlement');
 
-  assert.equal(record.players.find(player => player.seat === 2).placement, 1);
-  assert.deepEqual(record.players.find(player => player.seat === 2).titles, ['领先者']);
+  assert.equal(record.players.find(player => player.seat === 1).placement, 1);
+  assert.equal(record.players.find(player => player.seat === 2).placement, 2);
+  assert.deepEqual(record.players.find(player => player.seat === 2).titles, []);
 });
