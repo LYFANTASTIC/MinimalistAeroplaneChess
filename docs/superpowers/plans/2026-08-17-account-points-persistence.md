@@ -228,8 +228,8 @@ GET /api/account/points?limit=20&cursor=...
 - Create: `backend/test/pointsService.test.cjs`
 - Modify: `backend/repositories/matchRepository.cjs`
 
-- [ ] Write transaction tests with an injectable transaction client. Cover first reward, repeated reward, parallel duplicate attempts, ledger failure rollback, AI/no-account skip, invalid facts, and database retry classification.
-- [ ] Implement one transaction that locks the wallet row, inserts the event, computes the reward on the server, updates wallet and stats, inserts the ledger, and updates the match player.
+- [x] Write transaction tests with an injectable transaction client. Cover first reward, repeated reward, parallel duplicate attempts, ledger failure rollback, AI/no-account skip, invalid facts, and database retry classification.
+- [x] Implement one transaction that locks the wallet row, inserts the event, computes the reward on the server, updates wallet and stats, inserts the ledger, and updates the match player.
 
 ```sql
 SELECT points_balance
@@ -242,11 +242,11 @@ FOR UPDATE;
 const idempotencyKey = `match:${matchId}:event:${sequenceNo}:user:${userId}`;
 ```
 
-- [ ] On `(match_id, sequence_no)` or `idempotency_key` conflict, query and return the original ledger amount and balance without updating any aggregate.
-- [ ] Add an in-memory retry queue keyed by idempotency key. Retry transient database errors at 250 ms, 1 s, and 4 s; expose `flushPendingForMatch(matchId)` for settlement. Keep permanent validation errors out of the retry queue.
-- [ ] Make the service emit structured success/failure callbacks rather than importing WebSocket code.
-- [ ] Run all backend tests, including a deliberate failure after wallet update that proves transaction rollback.
-- [ ] Commit: `feat: add idempotent points ledger`
+- [x] On `(match_id, sequence_no)` or `idempotency_key` conflict, query and return the original ledger amount and balance without updating any aggregate.
+- [x] Add an in-memory retry queue keyed by idempotency key. Retry transient database errors at 250 ms, 1 s, and 4 s; expose `flushPendingForMatch(matchId)` for settlement. Keep permanent validation errors out of the retry queue.
+- [x] Make the service emit structured success/failure callbacks rather than importing WebSocket code.
+- [x] Run all backend tests, including a deliberate failure after wallet update that proves transaction rollback.
+- [x] Commit: `feat: add idempotent points ledger`
 
 ## Task 7: Connect collision facts to the server without adding gameplay latency
 
