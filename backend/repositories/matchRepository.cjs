@@ -1,6 +1,6 @@
 'use strict';
 
-const { getPool } = require('../db/pool.cjs');
+const { getPool, withTransaction } = require('../db/pool.cjs');
 const { toFiniteNumber, toSafeInteger } = require('./userRepository.cjs');
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -70,8 +70,127 @@ function mapPointsEntry(row) {
   };
 }
 
-function createMatchRepository({ poolProvider = getPool } = {}) {
+function createMatchRepository({
+  poolProvider = getPool,
+  transactionRunner = withTransaction
+} = {}) {
   return {
+    async createMatch(input) {
+      return transactionRunner(poolProvider(), async client => {
+        const { rows: [match] } = await client.query(
+          `INSERT INTO app.matches
+           (id, room_code, happy_mode, team_mode, piece_count, launch_number, started_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
+           RETURNING id`,
+          [
+            input.id,
+            input.roomCode,
+            input.happyMode,
+            input.teamMode,
+            input.pieceCount,
+            input.launchNumber,
+            input.startedAt
+          ]
+        );
+
+        for (const player of input.players) {
+          await client.query(
+            `INSERT INTO app.match_players
+             (match_id, user_id, seat, team_no, is_ai, display_name_snapshot)
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [
+              match.id,
+              player.userId,
+              player.seat,
+              player.teamNo,
+              player.isAi,
+              player.displayName
+            ]
+          );
+        }
+        return match.id;
+      });
+    },
+
+    async settleMatch(input) {
+      return transactionRunner(poolProvider(), async client => {
+        const { rows: [settled] } = await client.query(
+          `UPDATE app.matches
+           SET status = 'finished', end_reason = $2, ended_at = $3, duration_ms = $4,
+               winner_user_id = $5, winner_team_no = $6
+           WHERE id = $1 AND status = 'playing'
+           RETURNING id`,
+          [
+            input.matchId,
+            input.endReason,
+            input.endedAt,
+            input.durationMs,
+            input.winnerUserId,
+            input.winnerTeamNo
+          ]
+        );
+        if (!settled) return false;
+
+        for (const player of input.players) {
+          await client.query(
+            `UPDATE app.match_players
+             SET placement = $3, planes_defeated = $4, happy_collisions = $5,
+                 movement_distance = $6, bounce_distance = $7,
+                 dice_statistics = $8::jsonb, titles = $9::jsonb, finished_at = $10
+             WHERE match_id = $1 AND seat = $2`,
+            [
+              input.matchId,
+              player.seat,
+              player.placement,
+              player.planesDefeated,
+              player.happyCollisions,
+              player.movementDistance,
+              player.bounceDistance,
+              JSON.stringify(player.diceStatistics || {}),
+              JSON.stringify(player.titles || []),
+              input.endedAt
+            ]
+          );
+          if (player.userId) {
+            await client.query(
+              `UPDATE app.user_stats
+               SET games_played = games_played + 1,
+                   games_won = games_won + $2,
+                   updated_at = now()
+               WHERE user_id = $1`,
+              [player.userId, player.isWinner ? 1 : 0]
+            );
+          }
+        }
+
+        await client.query(
+          `INSERT INTO app.match_events
+           (match_id, sequence_no, event_type, actor_user_id, payload)
+           VALUES ($1, $2, 'game_finished', $3, $4::jsonb)
+           ON CONFLICT (match_id, sequence_no) DO NOTHING`,
+          [
+            input.matchId,
+            input.sequenceNo,
+            input.winnerUserId,
+            JSON.stringify({ endReason: input.endReason })
+          ]
+        );
+        return true;
+      });
+    },
+
+    async abandonMatch(matchId, endReason = 'room_destroyed', endedAt = new Date().toISOString()) {
+      const { rows: [row] } = await poolProvider().query(
+        `UPDATE app.matches
+         SET status = 'abandoned', end_reason = $2, ended_at = $3,
+             duration_ms = GREATEST(0, floor(extract(epoch FROM ($3::timestamptz - started_at)) * 1000)::bigint)
+         WHERE id = $1 AND status = 'playing'
+         RETURNING id`,
+        [matchId, endReason, endedAt]
+      );
+      return !!row;
+    },
+
     async getUserMatches(userId, { limit, cursor = null }) {
       const params = cursor
         ? [userId, cursor.createdAt, cursor.id, limit + 1]
@@ -136,4 +255,3 @@ module.exports = {
   mapMatch,
   mapPointsEntry
 };
-

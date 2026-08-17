@@ -9,6 +9,7 @@ const crypto = require('crypto');
 const { UserConflictError, createUserRepository } = require('./repositories/userRepository.cjs');
 const { createMatchRepository } = require('./repositories/matchRepository.cjs');
 const { createAccountHandlers } = require('./routes/accountRoutes.cjs');
+const { buildMatchRecord, buildSettlementRecord } = require('./services/matchLifecycle.cjs');
 
 const app = express();
 const server = http.createServer(app);
@@ -454,6 +455,7 @@ class RoomManager {
     console.log(`创建游戏会话: ${gameSessionId}, 玩家数: ${players.length}, 棋子数: ${pieceCount}, 欢乐模式: ${happyMode}`);
     const gameSession = new GameSession(gameSessionId, players, pieceCount, roomCode, hostId, skillMode, happyMode, launchNumber, teamMode, teams);
     this.gameSessions.set(gameSessionId, gameSession);
+    beginMatchPersistence(gameSession);
     // 建立玩家-会话映射
     players.forEach(player => {
       if (!player.isAI) {
@@ -484,6 +486,10 @@ class RoomManager {
     }
 
     console.log(`删除游戏会话: ${gameSessionId}`);
+
+    if (gameSession.persistenceState === 'active') {
+      queueAbandonedMatch(gameSession, 'session_removed');
+    }
 
     // 删除所有玩家的会话映射
     gameSession.players.forEach((player, playerId) => {
@@ -565,10 +571,15 @@ const dailyStats = new DailyStats();
 class GameSession {
   constructor(gameSessionId, players, pieceCount = 4, roomCode = null, hostId = null, skillMode = false, happyMode = false, launchNumber = 'even', teamMode = false, teams = []) {
     this.gameSessionId = gameSessionId;
+    this.matchId = crypto.randomUUID();
     // AI玩家不需要连接状态，只有真实玩家才设置为isConnected: true
     this.players = new Map(players.map(p => [p.id, { ...p, isConnected: p.isAI ? false : true, ws: null }]));
     this.gameState = 'playing';
     this.createdAt = Date.now();
+    this.eventSequence = 0;
+    this.persistenceState = 'active';
+    this.matchPersistenceReady = null;
+    this.settlementPromise = null;
     this.pieceCount = pieceCount;
     this.roomCode = roomCode;
     this.hostId = hostId;
@@ -629,6 +640,11 @@ class GameSession {
     });
   }
 
+  nextEventSequence() {
+    this.eventSequence += 1;
+    return this.eventSequence;
+  }
+
   // 广播消息
   broadcast(message) {
     let sentCount = 0;
@@ -671,8 +687,10 @@ class GameSession {
   toJSON() {
     return {
       gameSessionId: this.gameSessionId,
+      matchId: this.matchId,
       players: Array.from(this.players.values()).map(p => ({
         ...p,
+        accountUserId: undefined,
         isHost: p.isHost || false  // 确保包含isHost字段
       })),
       gameState: this.gameState,
@@ -680,6 +698,47 @@ class GameSession {
       gameData: this.gameData
     };
   }
+}
+
+function beginMatchPersistence(gameSession) {
+  gameSession.matchPersistenceReady = matchRepository.createMatch(buildMatchRecord(gameSession))
+    .then(() => true)
+    .catch(error => {
+      gameSession.persistenceState = 'creation_failed';
+      console.error(`[对局持久化] 创建对局 ${gameSession.matchId} 失败:`, error);
+      return false;
+    });
+}
+
+function beginMatchSettlement(gameSession, message, endReason) {
+  if (!(gameSession instanceof GameSession) || gameSession.persistenceState !== 'active') return;
+  gameSession.persistenceState = 'settling';
+  const settlement = buildSettlementRecord(gameSession, message, endReason);
+  gameSession.settlementPromise = Promise.resolve(gameSession.matchPersistenceReady)
+    .then(ready => ready && matchRepository.settleMatch(settlement))
+    .then(saved => {
+      gameSession.persistenceState = saved ? 'finished' : 'settlement_skipped';
+      return saved;
+    })
+    .catch(error => {
+      gameSession.persistenceState = 'settlement_failed';
+      console.error(`[对局持久化] 结算对局 ${gameSession.matchId} 失败:`, error);
+      return false;
+    });
+}
+
+function queueAbandonedMatch(gameSession, endReason) {
+  if (!gameSession?.matchId || gameSession.persistenceState !== 'active') return;
+  gameSession.persistenceState = 'abandoning';
+  Promise.resolve(gameSession.matchPersistenceReady)
+    .then(ready => ready && matchRepository.abandonMatch(gameSession.matchId, endReason))
+    .then(saved => {
+      gameSession.persistenceState = saved ? 'abandoned' : 'abandon_skipped';
+    })
+    .catch(error => {
+      gameSession.persistenceState = 'abandon_failed';
+      console.error(`[对局持久化] 标记对局 ${gameSession.matchId} 为中止失败:`, error);
+    });
 }
 
 // -------------------------- 房间类（逻辑保持，优化玩家添加）--------------------------
@@ -1019,6 +1078,7 @@ class Player {
   constructor(id, ws, nickname = '', emoji = 'smile') {
     this.id = id;
     this.ws = ws;
+    this.accountUserId = ws?.authUser?.id || null;
     const normalizedNickname = String(nickname == null ? '' : nickname).trim();
     this.nickname = normalizedNickname || getDefaultNickname(id); // 统一默认昵称
     this.emoji = emoji;
@@ -2774,6 +2834,7 @@ function handleStartGame(ws, playerId) {
   // 收集玩家（真实+AI），设置房主标志
   const realPlayers = Array.from(room.players.values()).map(p => ({
     id: p.id,
+    accountUserId: p.accountUserId,
     color: p.color,
     playerNumber: p.color,  // 玩家编号等于颜色编号（1-4）
     nickname: p.nickname,
@@ -2784,6 +2845,7 @@ function handleStartGame(ws, playerId) {
   }));
   const aiPlayers = room.settings.aiPlayers.map(ai => ({
     id: ai.color,
+    accountUserId: null,
     color: ai.color,
     playerNumber: ai.color,  // 玩家编号等于颜色编号（1-4）
     nickname: ai.nickname,
@@ -4561,6 +4623,7 @@ function handleProgressHistorySync(ws, playerId, message) {
 function handleGameEnd(ws, playerId, message) {
   const target = getBroadcastTarget(playerId);
   if (!target) throw new Error('玩家不在任何房间或游戏会话中');
+  beginMatchSettlement(target, message, 'normal');
 
   // 重要：先广播，再清理会话映射。
   // 否则 removeGameSession 会清空 playerSessions，导致 GameSession.broadcast 由于映射校验而不发送给任何人。
@@ -4643,6 +4706,7 @@ function handleGameEnd(ws, playerId, message) {
 function handleForceSettlement(ws, playerId, message) {
   const target = getBroadcastTarget(playerId);
   if (!target) throw new Error('玩家不在任何房间或游戏会话中');
+  beginMatchSettlement(target, message, 'force_settlement');
 
   // 重要：先广播，再清理会话映射。
   // 否则 removeGameSession 会清空 playerSessions，导致 GameSession.broadcast 由于映射校验而不发送给任何人。

@@ -211,14 +211,14 @@ GET /api/account/points?limit=20&cursor=...
 - Modify: `backend/server.cjs:2780-2880`
 - Modify: `backend/server.cjs:4520-4630`
 
-- [ ] Write lifecycle tests for a match with two logged-in users and one AI: creation writes one match plus three players, AI gets `user_id = null`, settlement writes placement/stats once, and repeated settlement is idempotent.
-- [ ] Add `matchId`, `eventSequence`, `pendingPersistence`, and `startedAt` to `GameSession`. Use a UUID match ID independent of the transient `gameSessionId`.
-- [ ] Resolve each real player's account UUID from authenticated WebSocket identity. Snapshot seat, nickname, team number, and AI status at match start.
-- [ ] Fire `matchRepository.createMatch(...)` after the session is created. Do not await it in the start-game broadcast path; record the promise so reward persistence can await match creation ordering.
-- [ ] Normalize both `gameEnd` and `forceSettlement` into one idempotent settlement payload. Persist placements, non-item titles, movement/bounce metrics, dice statistics, match winner, duration, and end reason.
-- [ ] When a room with an active match is destroyed, mark the match `abandoned` without blocking room cleanup.
-- [ ] Run lifecycle tests and `node --check backend/server.cjs`.
-- [ ] Commit: `feat: persist match lifecycle`
+- [x] Write lifecycle tests for a match with two logged-in users and one AI: creation writes one match plus three players, AI gets `user_id = null`, settlement writes placement/stats once, and repeated settlement is idempotent.
+- [x] Add `matchId`, `eventSequence`, `pendingPersistence`, and `startedAt` to `GameSession`. Use a UUID match ID independent of the transient `gameSessionId`.
+- [x] Resolve each real player's account UUID from authenticated WebSocket identity. Snapshot seat, nickname, team number, and AI status at match start.
+- [x] Fire `matchRepository.createMatch(...)` after the session is created. Do not await it in the start-game broadcast path; record the promise so reward persistence can await match creation ordering.
+- [x] Normalize both `gameEnd` and `forceSettlement` into one idempotent settlement payload. Persist placements, non-item titles, movement/bounce metrics, dice statistics, match winner, duration, and end reason.
+- [x] When a room with an active match is destroyed, mark the match `abandoned` without blocking room cleanup.
+- [x] Run lifecycle tests and `node --check backend/server.cjs`.
+- [x] Commit: `feat: persist match lifecycle`
 
 ## Task 6: Implement idempotent account-point transactions and retries
 
