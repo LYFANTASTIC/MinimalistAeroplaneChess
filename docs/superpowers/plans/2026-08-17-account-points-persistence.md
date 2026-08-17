@@ -148,10 +148,10 @@ function createPool(env = process.env) {
 - Modify: `backend/server.cjs:4835-4985`
 - Modify: `backend/package.json`
 
-- [ ] Write repository tests with an injected query adapter for username/email lookup, ID lookup, registration transaction, profile update, password update, and account summary mapping.
-- [ ] Write importer tests proving UUID, salt, hash, username, email, and timestamps are preserved and a zero wallet/stat row is created with `ON CONFLICT DO NOTHING`.
-- [ ] Run the tests and confirm they fail before implementation.
-- [ ] Implement repository methods using snake-case SQL and camel-case application objects. Registration must insert the user, wallet, and stats in one transaction and translate PostgreSQL unique violations to a typed conflict error.
+- [x] Write repository tests with an injected query adapter for username/email lookup, ID lookup, registration transaction, profile update, password update, and account summary mapping.
+- [x] Write importer tests proving UUID, salt, hash, username, email, and timestamps are preserved and a zero wallet/stat row is created with `ON CONFLICT DO NOTHING`.
+- [x] Run the tests and confirm they fail before implementation.
+- [x] Implement repository methods using snake-case SQL and camel-case application objects. Registration must insert the user, wallet, and stats in one transaction and translate PostgreSQL unique violations to a typed conflict error.
 
 ```js
 async function createUser(input) {
@@ -170,12 +170,12 @@ async function createUser(input) {
 }
 ```
 
-- [ ] Convert `getAuthContext`, `getAccountDisplayName`, and `requireAuth` to async-safe code. `requireAuth` loads the user from PostgreSQL after validating the in-memory session token.
-- [ ] Convert register, login, profile, password, logout, and `/api/auth/me` handlers to async functions. Preserve all current validation, cookies, password hashing, response shapes, and session behavior.
-- [ ] Remove runtime reads/writes to `userStore` and `persistUserStore`; keep `backend/data/users.json` only as the import source.
-- [ ] Add `db:import-users` script with dry-run default and an explicit `--apply` requirement.
-- [ ] Run backend tests and `node --check backend/server.cjs`.
-- [ ] Commit: `feat: persist custom accounts in postgres`
+- [x] Convert `getAuthContext`, `getAccountDisplayName`, and `requireAuth` to async-safe code. `requireAuth` loads the user from PostgreSQL after validating the in-memory session token.
+- [x] Convert register, login, profile, password, logout, and `/api/auth/me` handlers to async functions. Preserve all current validation, cookies, password hashing, response shapes, and session behavior.
+- [x] Remove runtime reads/writes to `userStore` and `persistUserStore`; keep `backend/data/users.json` only as the import source.
+- [x] Add `db:import-users` script with dry-run default and an explicit `--apply` requirement.
+- [x] Run backend tests and `node --check backend/server.cjs`.
+- [x] Commit: `feat: persist custom accounts in postgres`
 
 ## Task 4: Add account summary, match history, and points-ledger APIs
 

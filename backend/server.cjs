@@ -6,6 +6,7 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { UserConflictError, createUserRepository } = require('./repositories/userRepository.cjs');
 
 const app = express();
 const server = http.createServer(app);
@@ -60,38 +61,10 @@ loadBannedWords();
 const AUTH_COOKIE_NAME = 'aeroplane_auth';
 const AUTH_SESSION_TTL = 24 * 60 * 60 * 1000;
 const AUTH_REMEMBER_TTL = 30 * 24 * 60 * 60 * 1000;
-const USER_DATA_FILE = path.resolve(process.env.USER_DATA_FILE || path.join(__dirname, 'data/users.json'));
 const authSessions = new Map();
 const authAttempts = new Map();
 const chatAttempts = new Map();
-
-function loadUserStore() {
-  try {
-    if (!fs.existsSync(USER_DATA_FILE)) {
-      return { version: 1, users: [] };
-    }
-    const data = JSON.parse(fs.readFileSync(USER_DATA_FILE, 'utf8'));
-    if (!data || !Array.isArray(data.users)) throw new Error('用户数据格式无效');
-    return data;
-  } catch (error) {
-    console.error('[账户系统] 无法读取用户数据:', error.message);
-    return { version: 1, users: [] };
-  }
-}
-
-const userStore = loadUserStore();
-
-function persistUserStore() {
-  const directory = path.dirname(USER_DATA_FILE);
-  fs.mkdirSync(directory, { recursive: true });
-  const tempFile = `${USER_DATA_FILE}.${process.pid}.tmp`;
-  fs.writeFileSync(tempFile, JSON.stringify(userStore, null, 2), { encoding: 'utf8', mode: 0o600 });
-  fs.renameSync(tempFile, USER_DATA_FILE);
-}
-
-function normalizeUsername(value) {
-  return String(value || '').trim().toLocaleLowerCase('zh-CN');
-}
+const userRepository = createUserRepository();
 
 function normalizeEmail(value) {
   return String(value || '').trim().toLowerCase();
@@ -179,7 +152,7 @@ function createAuthSession(req, res, userId, remember = false) {
   return token;
 }
 
-function getAuthContext(req) {
+async function getAuthContext(req) {
   const token = parseCookies(req)[AUTH_COOKIE_NAME];
   if (!token) return null;
   const session = authSessions.get(token);
@@ -187,7 +160,7 @@ function getAuthContext(req) {
     if (session) authSessions.delete(token);
     return null;
   }
-  const user = userStore.users.find(item => item.id === session.userId);
+  const user = await userRepository.findById(session.userId);
   if (!user) {
     authSessions.delete(token);
     return null;
@@ -199,20 +172,24 @@ function getAuthenticatedPlayerId(user) {
   return `player_${String(user.id).replaceAll('-', '')}`;
 }
 
-function getAccountDisplayName(playerId) {
-  const normalizedId = String(playerId || '').replace(/^player_/, '');
-  const user = userStore.users.find(item => String(item.id).replaceAll('-', '') === normalizedId);
+function getAccountDisplayName(ws, playerId) {
+  const user = ws?.authUser;
   return user?.displayName || user?.username || getDefaultNickname(playerId);
 }
 
-function requireAuth(req, res, next) {
-  const auth = getAuthContext(req);
-  if (!auth) {
-    clearAuthCookie(req, res);
-    return res.status(401).json({ success: false, message: '请先登录后再继续' });
+async function requireAuth(req, res, next) {
+  try {
+    const auth = await getAuthContext(req);
+    if (!auth) {
+      clearAuthCookie(req, res);
+      return res.status(401).json({ success: false, message: '请先登录后再继续' });
+    }
+    req.auth = auth;
+    next();
+  } catch (error) {
+    console.error('[账户系统] 认证查询失败:', error.message);
+    res.status(503).json({ success: false, message: '账户服务暂时不可用，请稍后重试' });
   }
-  req.auth = auth;
-  next();
 }
 
 function revokeUserSessions(userId, exceptToken = null) {
@@ -1495,8 +1472,17 @@ function forceDetachPlayerFromExistingContexts(playerId, nextRoomCode = null, is
   }
 }
 
-wss.on('connection', (ws, req) => {
-  const connectionAuth = getAuthContext(req);
+wss.on('connection', async (ws, req) => {
+  ws.pause();
+  let connectionAuth;
+  try {
+    connectionAuth = await getAuthContext(req);
+  } catch (error) {
+    console.error('[账户系统] WebSocket 认证查询失败:', error.message);
+    ws.send(JSON.stringify({ type: 'serviceUnavailable', message: '账户服务暂时不可用，请稍后重试' }));
+    ws.close(1013, 'Account service unavailable');
+    return;
+  }
   if (!connectionAuth) {
     ws.send(JSON.stringify({ type: 'authRequired', message: '请先登录后再进入联机模式' }));
     ws.close(4401, 'Authentication required');
@@ -1690,6 +1676,8 @@ wss.on('connection', (ws, req) => {
 
     roomManager.disconnectDebounceTimers.set(playerId, debounceTimer);
   });
+
+  ws.resume();
 });
 
 function handleMessage(ws, playerId, message) {
@@ -2004,7 +1992,7 @@ function handleCreateRoom(ws, playerId, message) {
   forceDetachPlayerFromExistingContexts(playerId, null, true);
 
   const emoji = message.data?.emoji || message.emoji;
-  const player = new Player(playerId, ws, getAccountDisplayName(playerId), emoji);
+  const player = new Player(playerId, ws, getAccountDisplayName(ws, playerId), emoji);
   const room = roomManager.createRoom(player);
   ws.send(JSON.stringify({ type: 'roomCreated', room: room.toJSON() }));
 
@@ -2057,7 +2045,7 @@ function handleJoinRoom(ws, playerId, message) {
     roomManager.setPlayerConnection(playerId, ws);
 
     // 只有客户端显式传了 nickname/emoji 才更新（避免用 undefined/空值覆盖）
-    existingPlayer.nickname = getAccountDisplayName(playerId);
+    existingPlayer.nickname = getAccountDisplayName(ws, playerId);
     if (message.data && Object.prototype.hasOwnProperty.call(message.data, 'emoji')) {
       if (message.data.emoji != null) {
         existingPlayer.emoji = message.data.emoji;
@@ -2105,7 +2093,7 @@ function handleJoinRoom(ws, playerId, message) {
   // 再次确保没有任何残留上下文（针对可能存在的残留 Session）
   forceDetachPlayerFromExistingContexts(playerId, roomCode, true);
 
-  const player = new Player(playerId, ws, getAccountDisplayName(playerId), message.data?.emoji);
+  const player = new Player(playerId, ws, getAccountDisplayName(ws, playerId), message.data?.emoji);
   roomManager.joinRoom(roomCode, player);
 
   // 发送加入成功消息
@@ -2230,7 +2218,7 @@ const handleSelectColor = withRoomValidation((ws, playerId, message, room, playe
 // 更新昵称（不使用房间验证中间件，允许玩家在房间外更新）
 function handleUpdateNickname(ws, playerId, message) {
   try {
-    const newNickname = getAccountDisplayName(playerId);
+    const newNickname = getAccountDisplayName(ws, playerId);
 
     // 先尝试在游戏会话中查找玩家
     const gameSession = roomManager.getPlayerGameSession(playerId);
@@ -4834,10 +4822,9 @@ function generatePlayerId() {
  * 注册账号
  * POST /api/auth/register
  */
-app.post('/api/auth/register', authRateLimit, (req, res) => {
+app.post('/api/auth/register', authRateLimit, async (req, res) => {
   try {
     const username = String(req.body?.username || '').trim();
-    const usernameKey = normalizeUsername(username);
     const email = normalizeEmail(req.body?.email);
     const password = req.body?.password;
 
@@ -4850,34 +4837,25 @@ app.post('/api/auth/register', authRateLimit, (req, res) => {
     if (!validatePassword(password)) {
       return res.status(400).json({ success: false, message: '密码至少 8 位，并同时包含字母和数字' });
     }
-    if (userStore.users.some(user => user.usernameKey === usernameKey)) {
-      return res.status(409).json({ success: false, message: '这个用户名已经被使用' });
-    }
-    if (userStore.users.some(user => user.email === email)) {
-      return res.status(409).json({ success: false, message: '这个邮箱已经注册过账号' });
-    }
-
     const passwordData = hashPassword(password);
-    const now = new Date().toISOString();
-    const user = {
+    const user = await userRepository.createUser({
       id: crypto.randomUUID(),
       username,
-      usernameKey,
       email,
       displayName: sanitizeText(username),
       passwordSalt: passwordData.salt,
-      passwordHash: passwordData.hash,
-      createdAt: now,
-      updatedAt: now
-    };
-    userStore.users.push(user);
-    persistUserStore();
+      passwordHash: passwordData.hash
+    });
     createAuthSession(req, res, user.id, true);
 
     res.status(201).json({ success: true, user: publicUser(user) });
   } catch (error) {
+    if (error instanceof UserConflictError) {
+      const message = error.field === 'email' ? '这个邮箱已经注册过账号' : '这个用户名已经被使用';
+      return res.status(409).json({ success: false, message });
+    }
     console.error('[账户系统] 注册失败:', error);
-    res.status(500).json({ success: false, message: '注册暂时不可用，请稍后重试' });
+    res.status(503).json({ success: false, message: '注册暂时不可用，请稍后重试' });
   }
 });
 
@@ -4885,13 +4863,11 @@ app.post('/api/auth/register', authRateLimit, (req, res) => {
  * 登录账号
  * POST /api/auth/login
  */
-app.post('/api/auth/login', authRateLimit, (req, res) => {
+app.post('/api/auth/login', authRateLimit, async (req, res) => {
   try {
     const identifier = String(req.body?.identifier || '').trim();
     const password = req.body?.password;
-    const identifierKey = normalizeUsername(identifier);
-    const emailKey = normalizeEmail(identifier);
-    const user = userStore.users.find(item => item.usernameKey === identifierKey || item.email === emailKey);
+    const user = await userRepository.findByIdentifier(identifier);
 
     if (!user || typeof password !== 'string' || !verifyPassword(password, user)) {
       return res.status(401).json({ success: false, message: '账号或密码不正确' });
@@ -4901,7 +4877,7 @@ app.post('/api/auth/login', authRateLimit, (req, res) => {
     res.json({ success: true, user: publicUser(user) });
   } catch (error) {
     console.error('[账户系统] 登录失败:', error);
-    res.status(500).json({ success: false, message: '登录暂时不可用，请稍后重试' });
+    res.status(503).json({ success: false, message: '登录暂时不可用，请稍后重试' });
   }
 });
 
@@ -4918,8 +4894,8 @@ app.get('/api/auth/me', requireAuth, (req, res) => {
  * POST /api/auth/logout
  */
 app.post('/api/auth/logout', (req, res) => {
-  const auth = getAuthContext(req);
-  if (auth) authSessions.delete(auth.token);
+  const token = parseCookies(req)[AUTH_COOKIE_NAME];
+  if (token) authSessions.delete(token);
   clearAuthCookie(req, res);
   res.json({ success: true });
 });
@@ -4928,16 +4904,16 @@ app.post('/api/auth/logout', (req, res) => {
  * 更新个人资料
  * PUT /api/auth/profile
  */
-app.put('/api/auth/profile', requireAuth, (req, res) => {
+app.put('/api/auth/profile', requireAuth, async (req, res) => {
   try {
     const displayName = String(req.body?.displayName || '').trim();
     if (!validateDisplayName(displayName)) {
       return res.status(400).json({ success: false, message: '昵称需为 2–16 位中文、字母、数字、下划线或短横线' });
     }
-    req.auth.user.displayName = sanitizeText(displayName);
-    req.auth.user.updatedAt = new Date().toISOString();
-    persistUserStore();
-    res.json({ success: true, user: publicUser(req.auth.user) });
+    const user = await userRepository.updateProfile(req.auth.user.id, sanitizeText(displayName));
+    if (!user) return res.status(404).json({ success: false, message: '账号不存在' });
+    req.auth.user = user;
+    res.json({ success: true, user: publicUser(user) });
   } catch (error) {
     console.error('[账户系统] 更新资料失败:', error);
     res.status(500).json({ success: false, message: '资料保存失败，请稍后重试' });
@@ -4948,7 +4924,7 @@ app.put('/api/auth/profile', requireAuth, (req, res) => {
  * 修改密码
  * PUT /api/auth/password
  */
-app.put('/api/auth/password', authRateLimit, requireAuth, (req, res) => {
+app.put('/api/auth/password', authRateLimit, requireAuth, async (req, res) => {
   try {
     const currentPassword = req.body?.currentPassword;
     const newPassword = req.body?.newPassword;
@@ -4963,10 +4939,12 @@ app.put('/api/auth/password', authRateLimit, requireAuth, (req, res) => {
     }
 
     const passwordData = hashPassword(newPassword);
-    req.auth.user.passwordSalt = passwordData.salt;
-    req.auth.user.passwordHash = passwordData.hash;
-    req.auth.user.updatedAt = new Date().toISOString();
-    persistUserStore();
+    const user = await userRepository.updatePassword(req.auth.user.id, {
+      passwordSalt: passwordData.salt,
+      passwordHash: passwordData.hash
+    });
+    if (!user) return res.status(404).json({ success: false, message: '账号不存在' });
+    req.auth.user = user;
     revokeUserSessions(req.auth.user.id, req.auth.token);
     res.json({ success: true });
   } catch (error) {
@@ -5399,11 +5377,16 @@ const protectedPagePaths = new Set([
   '/frontend/game.html', '/frontend/spectate.html', '/frontend/admin.html'
 ]);
 
-app.use((req, res, next) => {
+app.use(async (req, res, next) => {
   if (req.method !== 'GET' || !protectedPagePaths.has(req.path)) return next();
-  if (getAuthContext(req)) return next();
-  const returnTo = req.originalUrl.startsWith('/') && !req.originalUrl.startsWith('//') ? req.originalUrl : '/';
-  res.redirect(302, `/account?reason=login-required&returnTo=${encodeURIComponent(returnTo)}`);
+  try {
+    if (await getAuthContext(req)) return next();
+    const returnTo = req.originalUrl.startsWith('/') && !req.originalUrl.startsWith('//') ? req.originalUrl : '/';
+    res.redirect(302, `/account?reason=login-required&returnTo=${encodeURIComponent(returnTo)}`);
+  } catch (error) {
+    console.error('[账户系统] 页面认证查询失败:', error.message);
+    res.redirect(302, '/account?reason=service-unavailable');
+  }
 });
 
 // 兼容旧的 /frontend/*.html 地址，同时让生产环境可直接使用 /account、/game 等短地址。

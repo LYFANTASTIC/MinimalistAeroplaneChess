@@ -8,7 +8,8 @@
     "dev": "node server.cjs",
     "test": "node --test test",
     "db:migrate": "node db/migrate.cjs",
-    "db:health": "node db/health.cjs"
+    "db:health": "node db/health.cjs",
+    "db:import-users": "node scripts/import-users.cjs"
   },
   "dependencies": {
     "dotenv": "^17.2.3",
